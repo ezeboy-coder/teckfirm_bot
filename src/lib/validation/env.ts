@@ -1,15 +1,22 @@
 import { z } from "zod";
+import { toAbsoluteAppUrl } from "@/lib/utils/app-url";
 
 const envSchema = z.object({
   NODE_ENV: z.enum(["development", "test", "production"]).default("development"),
   APP_NAME: z.string().default("TeckFirm WiFi"),
   APP_ENV: z.enum(["development", "staging", "production", "test"]).default("development"),
-  NEXT_PUBLIC_APP_URL: z.string().url().default("http://localhost:3000"),
+  NEXT_PUBLIC_APP_URL: z.preprocess(
+    (value) => (typeof value === "string" ? toAbsoluteAppUrl(value) : value),
+    z.string().url().default("http://localhost:3000"),
+  ),
   NEXT_PUBLIC_APP_NAME: z.string().default("TeckFirm WiFi"),
   DATABASE_URL: z.string().min(1, "DATABASE_URL is required"),
   DIRECT_URL: z.string().min(1).optional(),
   AUTH_SECRET: z.string().min(32, "AUTH_SECRET must be at least 32 characters"),
-  AUTH_URL: z.string().url().optional(),
+  AUTH_URL: z.preprocess(
+    (value) => (typeof value === "string" && value.trim() ? toAbsoluteAppUrl(value) : value),
+    z.string().url().optional(),
+  ),
   AUTH_TRUST_HOST: z.string().optional(),
   AUTH_GOOGLE_ID: z.string().optional(),
   AUTH_GOOGLE_SECRET: z.string().optional(),

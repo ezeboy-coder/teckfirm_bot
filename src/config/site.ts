@@ -1,3 +1,5 @@
+import { toAbsoluteAppUrl } from "@/lib/utils/app-url";
+
 export const siteConfig = {
   name: "TeckFirm WiFi",
   shortName: "TeckFirm",
@@ -5,7 +7,7 @@ export const siteConfig = {
   companyUrl: "https://teckfirm.org",
   description:
     "Purchase TeckFirm WiFi hotspot vouchers online and connect instantly across supported locations in Nigeria.",
-  url: process.env.NEXT_PUBLIC_APP_URL ?? "http://localhost:3000",
+  url: toAbsoluteAppUrl(process.env.NEXT_PUBLIC_APP_URL),
   supportEmail: "support@teckfirm.org",
   supportPhone: "+234 800 000 0000",
   currency: "NGN",
