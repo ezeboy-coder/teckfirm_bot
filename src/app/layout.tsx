@@ -2,7 +2,19 @@ import type { Metadata } from "next";
 import { Plus_Jakarta_Sans, Geist_Mono } from "next/font/google";
 import { AppProviders } from "@/components/providers";
 import { siteConfig } from "@/config/site";
+import { toAbsoluteAppUrl } from "@/lib/utils/app-url";
 import "./globals.css";
+
+function appOriginUrl(): URL {
+  const normalized = toAbsoluteAppUrl(siteConfig.url || process.env.NEXT_PUBLIC_APP_URL);
+  try {
+    return new URL(normalized);
+  } catch {
+    return new URL("https://teckfirm.org");
+  }
+}
+
+const appOrigin = appOriginUrl();
 
 const sans = Plus_Jakarta_Sans({
   variable: "--font-sans",
@@ -15,7 +27,7 @@ const mono = Geist_Mono({
 });
 
 export const metadata: Metadata = {
-  metadataBase: new URL(siteConfig.url),
+  metadataBase: appOrigin,
   title: {
     default: "TeckFirm WiFi | Buy WiFi Vouchers Online",
     template: "%s | TeckFirm WiFi",
@@ -26,7 +38,7 @@ export const metadata: Metadata = {
   openGraph: {
     type: "website",
     locale: "en_NG",
-    url: siteConfig.url,
+    url: appOrigin.href,
     siteName: siteConfig.name,
     title: "TeckFirm WiFi | Buy WiFi Vouchers Online",
     description: siteConfig.description,

@@ -4,6 +4,7 @@ import { toAbsoluteAppUrl } from "@/lib/utils/app-url";
 describe("toAbsoluteAppUrl", () => {
   it("adds https for a bare production host", () => {
     expect(toAbsoluteAppUrl("bot.teckfirm.org")).toBe("https://bot.teckfirm.org");
+    expect(() => new URL(toAbsoluteAppUrl("bot.teckfirm.org"))).not.toThrow();
   });
 
   it("keeps an existing absolute URL", () => {

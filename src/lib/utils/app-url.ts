@@ -5,9 +5,16 @@ export function toAbsoluteAppUrl(
   const raw = value?.trim();
   if (!raw) return fallback;
 
-  const withProtocol = /^[a-zA-Z][a-zA-Z\d+\-.]*:\/\//.test(raw)
-    ? raw
-    : `${raw.startsWith("localhost") || raw.startsWith("127.0.0.1") ? "http" : "https"}://${raw.replace(/^\/+/, "")}`;
+  const candidate = raw.includes("://") ? raw : `https://${raw.replace(/^\/+/, "")}`;
 
-  return withProtocol.replace(/\/$/, "");
+  try {
+    const parsed = new URL(candidate);
+    if (parsed.hostname === "localhost" || parsed.hostname === "127.0.0.1") {
+      parsed.protocol = "http:";
+    }
+    const path = parsed.pathname === "/" ? "" : parsed.pathname.replace(/\/$/, "");
+    return `${parsed.origin}${path}`;
+  } catch {
+    return fallback;
+  }
 }
