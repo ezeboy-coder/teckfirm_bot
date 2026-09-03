@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { isFailedPaystackCharge, isSuccessfulPaystackCharge, isCancelledPaystackCharge, paystackAmountMatchesOrder } from "@/lib/paystack/status";
+import { isFailedPaystackCharge, isSuccessfulPaystackCharge, isCancelledPaystackCharge, isPendingPaystackCharge, paystackAmountMatchesOrder } from "@/lib/paystack/status";
 
 describe("Paystack charge status", () => {
   it("treats only success as a paid charge", () => {
@@ -14,6 +14,14 @@ describe("Paystack charge status", () => {
     expect(isCancelledPaystackCharge("cancelled")).toBe(true);
     expect(isCancelledPaystackCharge("success")).toBe(false);
     expect(isCancelledPaystackCharge("failed")).toBe(false);
+  });
+
+  it("keeps abandoned and pending charges open until they succeed or fail", () => {
+    expect(isPendingPaystackCharge("abandoned")).toBe(true);
+    expect(isPendingPaystackCharge("pending")).toBe(true);
+    expect(isPendingPaystackCharge("ongoing")).toBe(true);
+    expect(isPendingPaystackCharge("success")).toBe(false);
+    expect(isPendingPaystackCharge("failed")).toBe(false);
   });
 
   it("treats failed and reversed as terminal failed charges", () => {

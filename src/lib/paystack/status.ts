@@ -12,6 +12,10 @@ export function isCancelledPaystackCharge(status: string): boolean {
   return normalized === "abandoned" || normalized === "cancelled";
 }
 
+export function isPendingPaystackCharge(status: string): boolean {
+  return !isSuccessfulPaystackCharge(status) && !isFailedPaystackCharge(status);
+}
+
 export function paystackAmountMatchesOrder(orderKobo: number, paystackAmountKobo: number, currency: string) {
   return orderKobo === paystackAmountKobo && currency.toUpperCase() === "NGN";
 }

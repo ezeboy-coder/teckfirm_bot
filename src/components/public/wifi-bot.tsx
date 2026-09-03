@@ -381,25 +381,10 @@ export function WifiBot({
       }
 
       const outcome = await openPaystackPopup(payload.data.accessCode);
-      if (outcome === "cancelled") {
-        await fetch("/api/payments/paystack/cancel", {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ reference: payload.data.reference }),
-        }).catch(() => null);
-        push("user", "Cancel payment");
-        botSay("Payment was cancelled. No voucher was issued. You can try again when you’re ready.", "pay");
-        return;
-      }
-      if (outcome === "failed") {
-        push("user", "Pay");
-        botSay("Payment did not go through. No voucher was issued. You can try again.", "pay");
-        return;
-      }
-
+      const closedWithoutSuccess = outcome === "cancelled" || outcome === "failed";
       push("user", "Pay");
       setSubmitting(false);
-      await confirmPaymentInBot(payload.data.reference);
+      await confirmPaymentInBot(payload.data.reference, { closedWithoutSuccess });
     } catch {
       toast.error("Could not start payment. Please try again.");
     } finally {
@@ -407,10 +392,14 @@ export function WifiBot({
     }
   }
 
-  async function confirmPaymentInBot(reference: string) {
+  async function confirmPaymentInBot(reference: string, options?: { closedWithoutSuccess?: boolean }) {
     setConfirmingPayment(true);
     const maxAttempts = 12;
+    const closedWithoutSuccess = Boolean(options?.closedWithoutSuccess);
     try {
+      if (closedWithoutSuccess) {
+        await new Promise((resolve) => window.setTimeout(resolve, 2500));
+      }
       for (let attempt = 1; attempt <= maxAttempts; attempt += 1) {
         try {
           const response = await fetch(`/api/payments/paystack/verify/${encodeURIComponent(reference)}`);
@@ -445,6 +434,33 @@ export function WifiBot({
           if (pending && attempt < maxAttempts) {
             await new Promise((resolve) => window.setTimeout(resolve, 2500));
             continue;
+          }
+
+          if (closedWithoutSuccess) {
+            const cancelResponse = await fetch("/api/payments/paystack/cancel", {
+              method: "POST",
+              headers: { "Content-Type": "application/json" },
+              body: JSON.stringify({ reference }),
+            });
+            const cancelPayload = (await cancelResponse.json()) as {
+              success: boolean;
+              message: string;
+              data?: { vouchers?: LookupVoucher[] };
+            };
+            const cancelVouchers = (cancelPayload.data?.vouchers ?? []).map((item) => ({
+              ...item,
+              status: item.status === "in-use" || item.status.toLowerCase() === "active" ? "in-use" : "unused",
+            })) as LookupVoucher[];
+            if (cancelPayload.success && cancelVouchers.length > 0) {
+              botSay(cancelPayload.message, "result");
+              setResult({ kind: "purchase", message: cancelPayload.message, vouchers: cancelVouchers });
+              return;
+            }
+            botSay(
+              cancelPayload.message || "Payment was cancelled. No voucher was issued. You can try again when you’re ready.",
+              "pay",
+            );
+            return;
           }
 
           const pendingMessage =

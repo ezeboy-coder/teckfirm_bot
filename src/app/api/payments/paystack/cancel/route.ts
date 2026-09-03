@@ -23,7 +23,13 @@ export async function POST(request: Request) {
     if (!result.ok) {
       return apiError(result.message, result.code, result.status);
     }
-    return apiSuccess({}, "Payment was cancelled. No voucher was issued.");
+    if (result.vouchers.length > 0) {
+      return apiSuccess(
+        { vouchers: result.vouchers, pending: result.pending },
+        result.vouchers.length === 1 ? "Here is your voucher." : "Here are your vouchers.",
+      );
+    }
+    return apiSuccess({ vouchers: [], pending: false }, "Payment was cancelled. No voucher was issued.");
   } catch (error) {
     if (isDatabaseUnavailable(error)) {
       return apiError("Unable to cancel payment right now.", "DATABASE_OFFLINE", 503);

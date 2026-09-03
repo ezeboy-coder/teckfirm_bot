@@ -7,7 +7,6 @@ import {
 import { PaystackError, PaystackNotConfiguredError } from "@/lib/paystack/errors";
 import { sanitizePaystackPayload } from "@/lib/paystack/sanitize";
 import {
-  isCancelledPaystackCharge,
   isFailedPaystackCharge,
   isSuccessfulPaystackCharge,
   paystackAmountMatchesOrder,
@@ -181,24 +180,6 @@ export async function confirmPaystackReference(reference: string): Promise<Confi
         status: 402,
       };
     }
-    if (isCancelledPaystackCharge(verified.status)) {
-      await applyVerifiedPayment({
-        orderId: order.id,
-        paymentStatus: "ABANDONED",
-        orderStatus: "CANCELLED",
-        providerTransactionId,
-        channel: verified.channel,
-        gatewayResponse: verified.gatewayResponse,
-        paidAt: null,
-        sanitized,
-      });
-      return {
-        ok: false,
-        message: "Payment was cancelled. No voucher was issued.",
-        code: "PAYMENT_CANCELLED",
-        status: 402,
-      };
-    }
     return { ok: true, vouchers: [], pending: true };
   }
 
@@ -246,7 +227,24 @@ export async function confirmPaystackReference(reference: string): Promise<Confi
   };
 }
 
+function wait(ms: number) {
+  return new Promise((resolve) => setTimeout(resolve, ms));
+}
+
 export async function cancelPendingCheckout(reference: string): Promise<ConfirmPaymentResult> {
+  const confirmed = await confirmPaystackReference(reference);
+  if (!confirmed.ok) return confirmed;
+  if (confirmed.vouchers.length > 0 || !confirmed.pending) {
+    return confirmed;
+  }
+
+  await wait(2500);
+  const again = await confirmPaystackReference(reference);
+  if (!again.ok) return again;
+  if (again.vouchers.length > 0 || !again.pending) {
+    return again;
+  }
+
   const order = await findOrderByReference(reference);
   if (!order) {
     return {
@@ -258,12 +256,7 @@ export async function cancelPendingCheckout(reference: string): Promise<ConfirmP
   }
 
   if (order.voucher || order.paymentStatus === "SUCCESS") {
-    return {
-      ok: false,
-      message: "This payment already completed. No change was made.",
-      code: "ALREADY_PAID",
-      status: 409,
-    };
+    return confirmPaystackReference(reference);
   }
 
   if (order.status === "CANCELLED" || order.paymentStatus === "ABANDONED") {
@@ -272,16 +265,11 @@ export async function cancelPendingCheckout(reference: string): Promise<ConfirmP
 
   const cancelled = await markOpenOrderCancelled({
     orderId: order.id,
-    gatewayResponse: "Cancelled by customer",
+    gatewayResponse: "Cancelled by customer after Paystack verification",
   });
 
   if (!cancelled) {
-    return {
-      ok: false,
-      message: "This payment could not be cancelled.",
-      code: "CANCEL_FAILED",
-      status: 409,
-    };
+    return confirmPaystackReference(reference);
   }
 
   return { ok: true, vouchers: [], pending: false };
