@@ -1,0 +1,28 @@
+services:
+  postgres:
+    image: postgres:16-alpine
+    container_name: teckfirm-wifi-postgres
+    restart: unless-stopped
+    ports:
+      - "5432:5432"
+    environment:
+      POSTGRES_USER: teckfirm
+      POSTGRES_PASSWORD: teckfirm
+      POSTGRES_DB: teckfirm_wifi
+    volumes:
+      - teckfirm_postgres_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U teckfirm -d teckfirm_wifi"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+
+  redis:
+    image: redis:7-alpine
+    container_name: teckfirm-wifi-redis
+    restart: unless-stopped
+    ports:
+      - "6379:6379"
+
+volumes:
+  teckfirm_postgres_data:

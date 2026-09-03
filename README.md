@@ -1,36 +1,104 @@
-This is a [Next.js](https://nextjs.org) project bootstrapped with [`create-next-app`](https://nextjs.org/docs/app/api-reference/cli/create-next-app).
+# TeckFirm WiFi
 
-## Getting Started
+Automated WiFi voucher sales platform for TeckFirm. Customers select a hotspot, choose a plan, pay, and receive an access voucher. This repository currently includes **Phase 1 (foundation)** and **Phase 2 (public website)**. Paystack charging is not enabled yet. Omada talks to the OC200 through **Omada Cloud Access**, not a local controller IP.
 
-First, run the development server:
+## Stack
+
+- Next.js 16 (App Router) + TypeScript
+- Tailwind CSS + shadcn/ui
+- PostgreSQL + Prisma
+- Auth.js (NextAuth v5)
+- Zod validation
+
+## Local setup
+
+### 1. Environment
 
 ```bash
-npm run dev
-# or
-yarn dev
-# or
-pnpm dev
-# or
-bun dev
+cp .env.example .env
 ```
 
-Open [http://localhost:3000](http://localhost:3000) with your browser to see the result.
+Generate an auth secret and put it in `.env`:
 
-You can start editing the page by modifying `app/page.tsx`. The page auto-updates as you edit the file.
+```bash
+openssl rand -base64 32
+```
 
-This project uses [`next/font`](https://nextjs.org/docs/app/building-your-application/optimizing/fonts) to automatically optimize and load [Geist](https://vercel.com/font), a new font family for Vercel.
+`AUTH_SECRET` must be at least 32 characters. Do not use production Paystack or Omada credentials in development.
 
-## Learn More
+### 2. Database
 
-To learn more about Next.js, take a look at the following resources:
+Start PostgreSQL (and Redis for later phases).
 
-- [Next.js Documentation](https://nextjs.org/docs) - learn about Next.js features and API.
-- [Learn Next.js](https://nextjs.org/learn) - an interactive Next.js tutorial.
+**Option A — Docker**
 
-You can check out [the Next.js GitHub repository](https://github.com/vercel/next.js) - your feedback and contributions are welcome!
+```bash
+docker compose up -d
+```
 
-## Deploy on Vercel
+**Option B — Homebrew Postgres** (used if Docker is not installed)
 
-The easiest way to deploy your Next.js app is to use the [Vercel Platform](https://vercel.com/new?utm_medium=default-template&filter=next.js&utm_source=create-next-app&utm_campaign=create-next-app-readme) from the creators of Next.js.
+```bash
+brew services start postgresql@16
+```
 
-Check out our [Next.js deployment documentation](https://nextjs.org/docs/app/building-your-application/deploying) for more details.
+Then apply migrations and load clearly labelled **DEMO** locations/plans:
+
+```bash
+npx prisma migrate dev
+npx prisma db seed
+```
+
+Demo accounts (local development only):
+
+| Role | Email | Password |
+| --- | --- | --- |
+| Super admin | `demo.admin@teckfirm.org` | `DemoAdmin123!` |
+| Customer | `demo.customer@example.com` | `DemoCustomer123!` |
+
+Change these before any shared environment.
+
+### 3. Run the app
+
+```bash
+npm install
+npm run dev
+```
+
+Open [http://localhost:3000](http://localhost:3000).
+
+## Useful scripts
+
+| Script | Purpose |
+| --- | --- |
+| `npm run dev` | Development server |
+| `npm run typecheck` | TypeScript |
+| `npm run lint` | ESLint |
+| `npm test` | Unit tests |
+| `npm run db:studio` | Prisma Studio |
+
+## Architecture notes
+
+- The backend is the authority. The browser never talks to Paystack or Omada with secret keys.
+- Financial amounts are stored as integer **kobo**.
+- Omada Cloud Access uses `OMADA_CLOUD_BASE_URL`, `OMADA_CLOUD_USERNAME`, and `OMADA_CLOUD_PASSWORD` on the server. Each location stores its own Omada Device ID and Omada ID in admin.
+- Guest checkout is supported. Registration is optional.
+
+## Phase map
+
+1. Foundation — layouts, auth, schema, design system
+2. Public website — landing, plans, locations, purchase assistant
+3. Admin CRUD
+4. Orders
+5. Paystack
+6. Mock vouchers
+7. Live Omada
+8. Customer accounts (deep)
+9. Wallet
+10. Admin operations
+11. Hardening
+12. Production
+
+## Deployment
+
+The app can run on Vercel or Docker. PostgreSQL should be a managed instance (Neon, RDS, and similar). The OC200 is reached through Omada Cloud Access over the internet. Do not point the app at a private `192.168.x.x` controller address.

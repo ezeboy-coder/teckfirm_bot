@@ -1,0 +1,647 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider  = "postgresql"
+  url       = env("DATABASE_URL")
+  directUrl = env("DIRECT_URL")
+}
+
+enum Role {
+  CUSTOMER
+  SUPPORT
+  MANAGER
+  ADMIN
+  SUPER_ADMIN
+}
+
+enum UserStatus {
+  ACTIVE
+  SUSPENDED
+  DISABLED
+}
+
+enum DurationUnit {
+  MINUTES
+  HOURS
+  DAYS
+}
+
+enum DataUnit {
+  MB
+  GB
+  UNLIMITED
+}
+
+enum LocationKind {
+  COMMUNITY
+  COMMUNITY_AND_LODGE
+}
+
+enum OmadaControllerStatus {
+  ONLINE
+  DEGRADED
+  OFFLINE
+  UNKNOWN
+}
+
+enum OrderStatus {
+  PENDING
+  PAYMENT_PENDING
+  PAID
+  FULFILLING
+  COMPLETED
+  FAILED
+  CANCELLED
+  REFUNDED
+  MANUAL_REVIEW
+}
+
+enum PaymentStatus {
+  INITIALIZED
+  PENDING
+  SUCCESS
+  FAILED
+  ABANDONED
+  REVERSED
+  REFUNDED
+}
+
+enum PaymentProvider {
+  PAYSTACK
+  WALLET
+}
+
+enum FulfillmentStatus {
+  NOT_STARTED
+  PROCESSING
+  COMPLETED
+  RETRY_PENDING
+  MANUAL_REVIEW
+}
+
+enum VoucherStatus {
+  CREATED
+  UNUSED
+  ACTIVE
+  EXPIRED
+  USED
+  REVOKED
+  ERROR
+}
+
+enum WalletStatus {
+  ACTIVE
+  FROZEN
+  CLOSED
+}
+
+enum WalletTransactionType {
+  CREDIT
+  DEBIT
+  REFUND
+  ADJUSTMENT
+}
+
+enum WalletTransactionStatus {
+  PENDING
+  COMPLETED
+  FAILED
+  REVERSED
+}
+
+enum SupportTicketStatus {
+  OPEN
+  IN_PROGRESS
+  RESOLVED
+  CLOSED
+}
+
+enum SupportTicketCategory {
+  PAYMENT
+  VOUCHER
+  CONNECTIVITY
+  WALLET
+  OTHER
+}
+
+enum SupportTicketPriority {
+  LOW
+  MEDIUM
+  HIGH
+  URGENT
+}
+
+enum NotificationChannel {
+  EMAIL
+  SMS
+  WHATSAPP
+}
+
+enum NotificationStatus {
+  PENDING
+  SENT
+  FAILED
+}
+
+enum IntegrationLogLevel {
+  INFO
+  WARN
+  ERROR
+}
+
+enum HealthStatus {
+  ONLINE
+  DEGRADED
+  OFFLINE
+}
+
+model User {
+  id            String     @id @default(cuid())
+  name          String?
+  firstName     String
+  lastName      String?
+  email         String?    @unique
+  phone         String?    @unique
+  passwordHash  String?
+  role          Role       @default(CUSTOMER)
+  status        UserStatus @default(ACTIVE)
+  emailVerified DateTime?
+  image         String?
+  lastLoginAt   DateTime?
+  createdAt     DateTime   @default(now())
+  updatedAt     DateTime   @updatedAt
+
+  accounts           Account[]
+  sessions           Session[]
+  customerProfile    CustomerProfile?
+  adminProfile       AdminProfile?
+  orders             Order[]
+  vouchers           Voucher[]
+  wallet             Wallet?
+  notifications      Notification[]
+  supportTickets     SupportTicket[]  @relation("CustomerTickets")
+  assignedTickets    SupportTicket[]  @relation("AssignedTickets")
+  auditLogs          AuditLog[]
+  integrationLogs    IntegrationLog[]
+
+  @@index([role, status])
+  @@index([createdAt])
+}
+
+model Account {
+  id                String  @id @default(cuid())
+  userId            String
+  type              String
+  provider          String
+  providerAccountId String
+  refresh_token     String? @db.Text
+  access_token      String? @db.Text
+  expires_at        Int?
+  token_type        String?
+  scope             String?
+  id_token          String? @db.Text
+  session_state     String?
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([provider, providerAccountId])
+  @@index([userId])
+}
+
+model Session {
+  id           String   @id @default(cuid())
+  sessionToken String   @unique
+  userId       String
+  expires      DateTime
+  user         User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@index([userId])
+}
+
+model VerificationToken {
+  identifier String
+  token      String
+  expires    DateTime
+
+  @@unique([identifier, token])
+}
+
+model CustomerProfile {
+  id        String   @id @default(cuid())
+  userId    String   @unique
+  city      String?
+  state     String?
+  notes     String?  @db.Text
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+}
+
+model AdminProfile {
+  id        String   @id @default(cuid())
+  userId    String   @unique
+  title     String?
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+}
+
+model Permission {
+  id          String   @id @default(cuid())
+  key         String   @unique
+  description String?
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  roles RolePermission[]
+}
+
+model RolePermission {
+  id           String     @id @default(cuid())
+  role         Role
+  permissionId String
+  permission   Permission @relation(fields: [permissionId], references: [id], onDelete: Cascade)
+
+  @@unique([role, permissionId])
+}
+
+model OmadaController {
+  id                  String                 @id @default(cuid())
+  name                String
+  hostname            String?
+  baseUrl             String
+  controllerId        String?
+  clientIdEncrypted   String?
+  clientSecretEncrypted String?
+  status              OmadaControllerStatus  @default(UNKNOWN)
+  lastConnectedAt     DateTime?
+  lastErrorAt         DateTime?
+  lastErrorMessage    String?                @db.Text
+  active              Boolean                @default(true)
+  createdAt           DateTime               @default(now())
+  updatedAt           DateTime               @updatedAt
+
+  locations Location[]
+  vouchers  Voucher[]
+
+  @@index([active, status])
+}
+
+model Location {
+  id                String       @id @default(cuid())
+  name              String
+  slug              String       @unique
+  kind              LocationKind @default(COMMUNITY)
+  community         String
+  lodgeName         String?
+  omadaControllerIp String?
+  address           String?
+  city              String
+  state             String
+  description       String?      @db.Text
+  latitude          Decimal?     @db.Decimal(10, 7)
+  longitude         Decimal?     @db.Decimal(10, 7)
+  active            Boolean      @default(true)
+  controllerLive    Boolean      @default(true)
+  omadaControllerId String?
+  omadaDeviceId     String?
+  omadaId           String?
+  omadaSiteId       String?
+  ssid              String?
+  wifiPasswordHint  String?
+  imageUrl          String?
+  supportPhone      String?
+  openingHours      String?
+  displayOrder      Int          @default(0)
+  createdAt         DateTime     @default(now())
+  updatedAt         DateTime     @updatedAt
+
+  omadaController OmadaController? @relation(fields: [omadaControllerId], references: [id], onDelete: SetNull)
+  plans           Plan[]
+  orders          Order[]
+  vouchers        Voucher[]
+  orderItems      OrderItem[]
+
+  @@index([active, displayOrder])
+  @@index([city, state])
+  @@index([kind, community])
+  @@index([omadaControllerId])
+}
+
+model Plan {
+  id              String       @id @default(cuid())
+  name            String
+  description     String?      @db.Text
+  locationId      String?
+  priceKobo       Int
+  currency        String       @default("NGN")
+  duration        Int
+  durationUnit    DurationUnit
+  dataAllowance   Int?
+  dataUnit        DataUnit     @default(UNLIMITED)
+  speedLimitMbps  Int?
+  deviceLimit     Int          @default(1)
+  omadaProfileId  String?
+  omadaVoucherGroup String?
+  active          Boolean      @default(true)
+  featured        Boolean      @default(false)
+  displayOrder    Int          @default(0)
+  createdAt       DateTime     @default(now())
+  updatedAt       DateTime     @updatedAt
+
+  location   Location?   @relation(fields: [locationId], references: [id], onDelete: SetNull)
+  orderItems OrderItem[]
+  vouchers   Voucher[]
+
+  @@index([locationId, active, displayOrder])
+  @@index([active, displayOrder])
+  @@index([featured, active])
+}
+
+model Order {
+  id                 String            @id @default(cuid())
+  reference          String            @unique
+  userId             String?
+  guestEmail         String?
+  guestPhone         String?
+  guestPinHash       String?
+  guestFirstName     String?
+  guestLastName      String?
+  locationId         String
+  subtotalKobo       Int
+  discountKobo       Int               @default(0)
+  totalKobo          Int
+  currency           String            @default("NGN")
+  status             OrderStatus       @default(PENDING)
+  paymentStatus      PaymentStatus     @default(INITIALIZED)
+  fulfillmentStatus  FulfillmentStatus @default(NOT_STARTED)
+  fulfillmentAttempts Int              @default(0)
+  lastFulfillmentError String?         @db.Text
+  nextRetryAt        DateTime?
+  paidAt             DateTime?
+  fulfilledAt        DateTime?
+  createdAt          DateTime          @default(now())
+  updatedAt          DateTime          @updatedAt
+
+  user     User?       @relation(fields: [userId], references: [id], onDelete: SetNull)
+  location Location    @relation(fields: [locationId], references: [id], onDelete: Restrict)
+  items    OrderItem[]
+  payments Payment[]
+  voucher  Voucher?
+  events   OrderEvent[]
+  walletTransactions WalletTransaction[]
+  supportTickets SupportTicket[]
+
+  @@index([userId, createdAt])
+  @@index([guestEmail])
+  @@index([guestPhone])
+  @@index([guestPhone, guestPinHash])
+  @@index([status, paymentStatus])
+  @@index([fulfillmentStatus, nextRetryAt])
+  @@index([locationId, createdAt])
+}
+
+model OrderItem {
+  id           String   @id @default(cuid())
+  orderId      String
+  planId       String
+  locationId   String
+  quantity     Int      @default(1)
+  unitPriceKobo Int
+  lineTotalKobo Int
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
+
+  order    Order    @relation(fields: [orderId], references: [id], onDelete: Cascade)
+  plan     Plan     @relation(fields: [planId], references: [id], onDelete: Restrict)
+  location Location @relation(fields: [locationId], references: [id], onDelete: Restrict)
+
+  @@index([orderId])
+  @@index([planId])
+}
+
+model OrderEvent {
+  id        String   @id @default(cuid())
+  orderId   String
+  type      String
+  message   String
+  metadata  Json?
+  createdAt DateTime @default(now())
+
+  order Order @relation(fields: [orderId], references: [id], onDelete: Cascade)
+
+  @@index([orderId, createdAt])
+}
+
+model Payment {
+  id                    String          @id @default(cuid())
+  orderId               String?
+  walletId              String?
+  provider              PaymentProvider
+  providerReference     String
+  providerTransactionId String?
+  amountKobo            Int
+  currency              String          @default("NGN")
+  status                PaymentStatus   @default(INITIALIZED)
+  channel               String?
+  gatewayResponse       String?
+  paidAt                DateTime?
+  verifiedAt            DateTime?
+  metadata              Json?
+  rawResponseSanitized  Json?
+  createdAt             DateTime        @default(now())
+  updatedAt             DateTime        @updatedAt
+
+  order  Order?  @relation(fields: [orderId], references: [id], onDelete: SetNull)
+  wallet Wallet? @relation(fields: [walletId], references: [id], onDelete: SetNull)
+  walletTransactions WalletTransaction[]
+
+  @@unique([provider, providerReference])
+  @@index([orderId])
+  @@index([status, createdAt])
+  @@index([providerTransactionId])
+}
+
+model Voucher {
+  id                 String        @id @default(cuid())
+  orderId            String        @unique
+  userId             String?
+  locationId         String
+  planId             String
+  omadaControllerId  String?
+  omadaSiteId        String?
+  omadaVoucherId     String?
+  code               String
+  password           String?
+  status             VoucherStatus @default(CREATED)
+  createdAt          DateTime      @default(now())
+  updatedAt          DateTime      @updatedAt
+  activatedAt        DateTime?
+  expiresAt          DateTime?
+  firstUsedAt        DateTime?
+  lastUsedAt         DateTime?
+  deviceLimit        Int?
+  dataAllowance      Int?
+  durationMinutes    Int?
+  fulfillmentAttempts Int          @default(0)
+  lastSyncAt         DateTime?
+  metadata           Json?
+
+  order           Order            @relation(fields: [orderId], references: [id], onDelete: Restrict)
+  user            User?            @relation(fields: [userId], references: [id], onDelete: SetNull)
+  location        Location         @relation(fields: [locationId], references: [id], onDelete: Restrict)
+  plan            Plan             @relation(fields: [planId], references: [id], onDelete: Restrict)
+  omadaController OmadaController? @relation(fields: [omadaControllerId], references: [id], onDelete: SetNull)
+  supportTickets  SupportTicket[]
+
+  @@unique([locationId, code])
+  @@index([userId, createdAt])
+  @@index([status, expiresAt])
+  @@index([locationId, createdAt])
+  @@index([code])
+}
+
+model Wallet {
+  id         String       @id @default(cuid())
+  userId     String       @unique
+  balanceKobo Int         @default(0)
+  currency   String       @default("NGN")
+  status     WalletStatus @default(ACTIVE)
+  createdAt  DateTime     @default(now())
+  updatedAt  DateTime     @updatedAt
+
+  user         User                @relation(fields: [userId], references: [id], onDelete: Cascade)
+  transactions WalletTransaction[]
+  payments     Payment[]
+
+  @@index([status])
+}
+
+model WalletTransaction {
+  id               String                   @id @default(cuid())
+  walletId         String
+  type             WalletTransactionType
+  amountKobo       Int
+  openingBalanceKobo Int
+  closingBalanceKobo Int
+  reference        String                   @unique
+  description      String
+  paymentId        String?
+  orderId          String?
+  status           WalletTransactionStatus  @default(COMPLETED)
+  createdAt        DateTime                 @default(now())
+  updatedAt        DateTime                 @updatedAt
+
+  wallet  Wallet   @relation(fields: [walletId], references: [id], onDelete: Cascade)
+  payment Payment? @relation(fields: [paymentId], references: [id], onDelete: SetNull)
+  order   Order?   @relation(fields: [orderId], references: [id], onDelete: SetNull)
+
+  @@index([walletId, createdAt])
+  @@index([status])
+}
+
+model Notification {
+  id        String              @id @default(cuid())
+  userId    String?
+  channel   NotificationChannel
+  recipient String
+  subject   String?
+  body      String              @db.Text
+  status    NotificationStatus  @default(PENDING)
+  sentAt    DateTime?
+  error     String?
+  metadata  Json?
+  createdAt DateTime            @default(now())
+  updatedAt DateTime            @updatedAt
+
+  user User? @relation(fields: [userId], references: [id], onDelete: SetNull)
+
+  @@index([userId, createdAt])
+  @@index([status, channel])
+}
+
+model SupportTicket {
+  id          String                 @id @default(cuid())
+  reference   String                 @unique
+  userId      String?
+  guestEmail  String?
+  guestPhone  String?
+  category    SupportTicketCategory
+  subject     String
+  message     String                 @db.Text
+  orderId     String?
+  voucherId   String?
+  priority    SupportTicketPriority  @default(MEDIUM)
+  status      SupportTicketStatus    @default(OPEN)
+  assignedToId String?
+  createdAt   DateTime               @default(now())
+  updatedAt   DateTime               @updatedAt
+
+  user       User?    @relation("CustomerTickets", fields: [userId], references: [id], onDelete: SetNull)
+  assignedTo User?    @relation("AssignedTickets", fields: [assignedToId], references: [id], onDelete: SetNull)
+  order      Order?   @relation(fields: [orderId], references: [id], onDelete: SetNull)
+  voucher    Voucher? @relation(fields: [voucherId], references: [id], onDelete: SetNull)
+
+  @@index([status, priority, createdAt])
+  @@index([userId])
+}
+
+model AuditLog {
+  id           String   @id @default(cuid())
+  actorId      String?
+  action       String
+  resource     String
+  resourceId   String?
+  previousData Json?
+  newData      Json?
+  ipAddress    String?
+  userAgent    String?
+  createdAt    DateTime @default(now())
+
+  actor User? @relation(fields: [actorId], references: [id], onDelete: SetNull)
+
+  @@index([actorId, createdAt])
+  @@index([resource, resourceId])
+  @@index([action, createdAt])
+}
+
+model SystemSetting {
+  id        String   @id @default(cuid())
+  key       String   @unique
+  value     Json
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+}
+
+model IntegrationLog {
+  id         String              @id @default(cuid())
+  provider   String
+  operation  String
+  level      IntegrationLogLevel
+  message    String
+  requestId  String?
+  actorId    String?
+  metadata   Json?
+  createdAt  DateTime            @default(now())
+
+  actor User? @relation(fields: [actorId], references: [id], onDelete: SetNull)
+
+  @@index([provider, createdAt])
+  @@index([level, createdAt])
+}
+
+model SiteSetting {
+  id           String   @id @default("site")
+  supportPhone String?
+  updatedAt    DateTime @updatedAt
+}
