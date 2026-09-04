@@ -291,8 +291,8 @@ export function extractOmadaVoucherFacts(row: Record<string, unknown>): OmadaVou
     if (status === "unused") {
       traffic = formatUsedOfTotal(0, limitGb);
     } else if (usedTrafficBytes != null && usedTrafficBytes >= 0) {
-      const remainingGb = usedTrafficBytes / 1024 / 1024 / 1024;
-      const usedGb = Math.max(0, limitGb - remainingGb);
+      // Omada `trafficUsed` is consumed bytes, not remaining.
+      const usedGb = usedTrafficBytes / 1024 / 1024 / 1024;
       traffic = formatUsedOfTotal(usedGb, limitGb);
     } else {
       traffic = formatMegabytesAsGb(trafficLimitMb);

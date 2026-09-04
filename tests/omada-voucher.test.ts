@@ -128,7 +128,7 @@ describe("Omada live voucher details", () => {
       }),
     ).toMatchObject({
       status: "in-use",
-      traffic: "3.65 GB used of 5 GB",
+      traffic: "1.35 GB used of 5 GB",
       duration: "29 days left",
       devices: "1",
     });
@@ -145,7 +145,21 @@ describe("Omada live voucher details", () => {
       }),
     ).toMatchObject({
       status: "expired",
-      traffic: "3.65 GB used of 5 GB",
+      traffic: "1.35 GB used of 5 GB",
+    });
+  });
+
+  it("shows three gigabytes used of a five gigabyte cap", () => {
+    expect(
+      extractOmadaVoucherFacts({
+        status: 1,
+        trafficLimitEnable: true,
+        trafficLimit: 5120,
+        trafficUsed: 3 * 1024 * 1024 * 1024,
+      }),
+    ).toMatchObject({
+      status: "in-use",
+      traffic: "3 GB used of 5 GB",
     });
   });
 
