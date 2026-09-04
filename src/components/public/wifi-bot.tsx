@@ -838,8 +838,8 @@ export function WifiBot({
   }
 
   const menuChoices: Choice[] = [
-    { id: "buy", label: "Buy WiFi" },
-    { id: "codes", label: "My Vouchers" },
+    //{ id: "buy", label: "Buy WiFi" },
+    //{ id: "codes", label: "My Vouchers" },
     { id: "check", label: "Voucher Balance" },
   ];
 
