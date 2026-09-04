@@ -203,7 +203,8 @@ export function WifiBot({
     const welcome: ChatMessage = {
       id: "welcome",
       role: "bot",
-      text: "Hi, I’m the TeckFirm WiFi assistant. You can buy a voucher in a few taps — no account needed.",
+      text: "Hi, I’m the TeckFirm WiFi assistant. You can buy a voucher in a few taps — no account needed.For Now, I can only check your voucher balance as I still in devleompment phase🥰",
+
     };
     if (!startInBuy) return [welcome];
     return [
@@ -832,7 +833,7 @@ export function WifiBot({
       {
         id: "welcome",
         role: "bot",
-        text: "Hi, I’m the TeckFirm WiFi assistant. You can buy a voucher in a few taps — no account needed.",
+        text: "Hi, I’m the TeckFirm WiFi assistant. You can buy a voucher in a few taps — no account needed.For Now, I can only check your voucher balance as I still in devleompment phase🥰",
       },
     ]);
   }
