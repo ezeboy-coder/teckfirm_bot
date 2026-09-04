@@ -1,6 +1,6 @@
 import { z } from "zod";
 import { parseNairaInput } from "@/lib/utils/money";
-import { isElevenDigitCode, isNigerianPhone } from "@/lib/utils/phone";
+import { isElevenDigitCode, isNigerianPhone, joinSupportPhone } from "@/lib/utils/phone";
 import { isRetrievalPin } from "@/lib/utils/pin";
 
 export const emailSchema = z.string().trim().email("Enter a valid email address");
@@ -87,9 +87,34 @@ export const adminPriceIdSchema = z.object({
   planId: z.string().trim().min(1, "Choose a price"),
 });
 
-export const adminSupportPhoneSchema = z.object({
-  supportPhone: guestPhoneSchema,
-});
+export const adminSupportPhoneSchema = z
+  .object({
+    countryCode: z
+      .string()
+      .trim()
+      .min(1, "Enter a country code")
+      .refine((value) => /^\+?\d{1,4}$/.test(value.replace(/\s/g, "")), "Enter a valid country code"),
+    supportPhone: z
+      .string()
+      .trim()
+      .min(6, "Enter the phone number")
+      .refine((value) => {
+        const digits = value.replace(/\D/g, "");
+        return digits.length >= 6 && digits.length <= 12;
+      }, "Enter a valid phone number"),
+  })
+  .transform((data, ctx) => {
+    const supportPhone = joinSupportPhone(data.countryCode, data.supportPhone);
+    if (!supportPhone) {
+      ctx.addIssue({
+        code: "custom",
+        message: "Enter a valid country code and phone number",
+        path: ["supportPhone"],
+      });
+      return z.NEVER;
+    }
+    return { supportPhone };
+  });
 
 export const paystackReferenceSchema = z.object({
   reference: z.string().trim().min(8, "Missing payment reference").max(80),

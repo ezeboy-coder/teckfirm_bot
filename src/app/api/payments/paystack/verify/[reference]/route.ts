@@ -39,6 +39,8 @@ export async function GET(
       {
         vouchers: result.vouchers,
         pending: result.pending,
+        paid: result.paid,
+        cancelled: Boolean(result.cancelled),
         reference: trimmed,
         supportPhone,
       },

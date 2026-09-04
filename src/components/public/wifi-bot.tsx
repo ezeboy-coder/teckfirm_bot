@@ -13,10 +13,12 @@ import {
   formatDuration,
   formatNgnFromKobo,
 } from "@/lib/utils/money";
-import { isElevenDigitCode } from "@/lib/utils/phone";
+import { isElevenDigitCode, toWhatsAppUrl } from "@/lib/utils/phone";
 import { isUnlimitedDeviceLimit } from "@/lib/plans/terms";
 import { digitsOnly, isRetrievalPin, isVoucherCode } from "@/lib/utils/pin";
 import { openPaystackPopup } from "@/lib/paystack/popup";
+import { paymentEnquiryWhatsAppText } from "@/lib/utils/support-message";
+import { WhatsAppIcon } from "@/components/public/whatsapp-icon";
 import type { PublicLocation, PublicPlan } from "@/types/catalog";
 
 type Choice = {
@@ -42,13 +44,17 @@ type LookupVoucher = {
 };
 
 type ResultCard =
-  | { kind: "codes"; message: string; vouchers: LookupVoucher[]; pendingReferences: string[] }
+  | { kind: "codes"; message: string; vouchers: LookupVoucher[] }
   | { kind: "purchase"; message: string; vouchers: LookupVoucher[] }
   | {
       kind: "pay-pending";
       message: string;
       reference: string;
       supportPhone: string | null;
+      locationName: string | null;
+      planName: string | null;
+      amountKobo: number | null;
+      phone: string | null;
     }
   | {
       kind: "check";
@@ -95,6 +101,67 @@ function planBoxTitle(plan: PublicPlan) {
   }
   if (plan.dataUnit === "GB" && plan.dataAllowance) return `${plan.dataAllowance} GB`;
   return plan.name;
+}
+
+function PaymentReferenceCard({
+  reference,
+  supportPhone,
+  locationName,
+  planName,
+  amountKobo,
+  phone,
+}: {
+  reference: string;
+  supportPhone: string | null;
+  locationName?: string | null;
+  planName?: string | null;
+  amountKobo?: number | null;
+  phone?: string | null;
+}) {
+  const message = paymentEnquiryWhatsAppText({
+    reference,
+    locationName,
+    planName,
+    amountKobo,
+    phone,
+  });
+  const whatsappUrl = supportPhone ? toWhatsAppUrl(supportPhone, message) : null;
+
+  return (
+    <div className="rounded-2xl bg-white p-4 shadow-sm ring-1 ring-black/5">
+      <p className="text-sm font-medium">Payment reference</p>
+      <div className="mt-2 flex items-start gap-2">
+        {whatsappUrl ? (
+          <a
+            href={whatsappUrl}
+            target="_blank"
+            rel="noopener noreferrer"
+            className="min-w-0 flex-1 font-mono text-base font-semibold tracking-wide break-all text-primary underline-offset-2 hover:underline"
+          >
+            {reference}
+          </a>
+        ) : (
+          <p className="min-w-0 flex-1 font-mono text-base font-semibold tracking-wide break-all">{reference}</p>
+        )}
+        {whatsappUrl ? (
+          <a
+            href={whatsappUrl}
+            target="_blank"
+            rel="noopener noreferrer"
+            aria-label="Send this payment summary on WhatsApp"
+            className="inline-flex size-9 shrink-0 items-center justify-center rounded-full bg-[#25D366] text-white shadow-sm transition hover:bg-[#1ebe57] focus-visible:outline-none focus-visible:ring-3 focus-visible:ring-[#25D366]/40"
+          >
+            <WhatsAppIcon className="size-5" />
+          </a>
+        ) : null}
+      </div>
+      <p className="mt-3 text-sm text-muted-foreground">
+        {whatsappUrl
+          ? "Tap the reference or WhatsApp icon to message support. The payment summary is already filled in — just send."
+          : "Contact support with this reference to log your enquiry."}
+      </p>
+    </div>
+  );
 }
 
 function Bubble({ role, children }: { role: "bot" | "user"; children: React.ReactNode }) {
@@ -163,6 +230,14 @@ export function WifiBot({
   const [submitting, setSubmitting] = useState(false);
   const [confirmingPayment, setConfirmingPayment] = useState(false);
   const [result, setResult] = useState<ResultCard | null>(null);
+  const [pendingCheckout, setPendingCheckout] = useState<{
+    reference: string;
+    supportPhone: string | null;
+    locationName: string | null;
+    planName: string | null;
+    amountKobo: number | null;
+    phone: string | null;
+  } | null>(null);
   const scroller = useRef<HTMLDivElement>(null);
   const timers = useRef<number[]>([]);
   const flowSeq = useRef(0);
@@ -172,7 +247,7 @@ export function WifiBot({
 
   useEffect(() => {
     scroller.current?.scrollTo({ top: scroller.current.scrollHeight, behavior: "smooth" });
-  }, [messages, typing, stage, result]);
+  }, [messages, typing, stage, result, pendingCheckout]);
 
   useEffect(() => {
     return () => {
@@ -232,6 +307,7 @@ export function WifiBot({
     setIntent("buy");
     resetPurchase();
     setResult(null);
+    setPendingCheckout(null);
     push("user", "Buy WiFi");
     setTyping(true);
     const catalog = await refreshCatalog();
@@ -261,7 +337,7 @@ export function WifiBot({
     setFormError(null);
     setVoucherCode("");
     setResult(null);
-    push("user", "Voucher Details");
+    push("user", "Voucher Balance");
     setTyping(true);
     const catalog = await refreshCatalog();
     if (seq !== flowSeq.current) return;
@@ -392,10 +468,29 @@ export function WifiBot({
     }
   }
 
+  function showPendingReference(_message: string, ref: string, contact: string | null) {
+    const details = {
+      reference: ref,
+      supportPhone: contact,
+      locationName: location ? displayName(location.name) : null,
+      planName: plan?.name ?? null,
+      amountKobo: plan?.priceKobo ?? null,
+      phone: phone.trim() || null,
+    };
+    setPendingCheckout(details);
+    botSay("Here is your payment reference.", "result");
+    setResult({
+      kind: "pay-pending",
+      message: "Here is your payment reference.",
+      ...details,
+    });
+  }
+
   async function confirmPaymentInBot(reference: string, options?: { closedWithoutSuccess?: boolean }) {
     setConfirmingPayment(true);
     const maxAttempts = 12;
     const closedWithoutSuccess = Boolean(options?.closedWithoutSuccess);
+
     try {
       if (closedWithoutSuccess) {
         await new Promise((resolve) => window.setTimeout(resolve, 2500));
@@ -409,6 +504,8 @@ export function WifiBot({
             data?: {
               vouchers?: LookupVoucher[];
               pending?: boolean;
+              paid?: boolean;
+              cancelled?: boolean;
               reference?: string;
               supportPhone?: string | null;
             };
@@ -418,9 +515,12 @@ export function WifiBot({
             status: item.status === "in-use" || item.status.toLowerCase() === "active" ? "in-use" : "unused",
           })) as LookupVoucher[];
           const pending = Boolean(payload.success && (payload.data?.pending || vouchers.length === 0));
+          const paid = Boolean(payload.data?.paid);
           const contactPhone = payload.data?.supportPhone ?? supportPhone;
+          const resolvedReference = payload.data?.reference ?? reference;
 
           if (payload.success && vouchers.length > 0) {
+            setPendingCheckout(null);
             botSay(payload.message, "result");
             setResult({ kind: "purchase", message: payload.message, vouchers });
             return;
@@ -436,7 +536,26 @@ export function WifiBot({
             continue;
           }
 
+          // Paid (or still waiting on voucher) must never be shown as cancelled.
+          if (paid || (pending && !closedWithoutSuccess)) {
+            showPendingReference(
+              payload.message || `Your payment reference is ${resolvedReference}.`,
+              resolvedReference,
+              contactPhone,
+            );
+            return;
+          }
+
           if (closedWithoutSuccess) {
+            if (paid) {
+              showPendingReference(
+                payload.message || `Your payment reference is ${resolvedReference}.`,
+                resolvedReference,
+                contactPhone,
+              );
+              return;
+            }
+
             const cancelResponse = await fetch("/api/payments/paystack/cancel", {
               method: "POST",
               headers: { "Content-Type": "application/json" },
@@ -445,15 +564,34 @@ export function WifiBot({
             const cancelPayload = (await cancelResponse.json()) as {
               success: boolean;
               message: string;
-              data?: { vouchers?: LookupVoucher[] };
+              data?: {
+                vouchers?: LookupVoucher[];
+                pending?: boolean;
+                paid?: boolean;
+                cancelled?: boolean;
+                reference?: string;
+                supportPhone?: string | null;
+              };
             };
             const cancelVouchers = (cancelPayload.data?.vouchers ?? []).map((item) => ({
               ...item,
               status: item.status === "in-use" || item.status.toLowerCase() === "active" ? "in-use" : "unused",
             })) as LookupVoucher[];
+            const cancelContact = cancelPayload.data?.supportPhone ?? contactPhone;
+            const cancelReference = cancelPayload.data?.reference ?? resolvedReference;
+
             if (cancelPayload.success && cancelVouchers.length > 0) {
+              setPendingCheckout(null);
               botSay(cancelPayload.message, "result");
               setResult({ kind: "purchase", message: cancelPayload.message, vouchers: cancelVouchers });
+              return;
+            }
+            if (cancelPayload.success && (cancelPayload.data?.paid || cancelPayload.data?.pending)) {
+              showPendingReference(
+                cancelPayload.message || `Your payment reference is ${cancelReference}.`,
+                cancelReference,
+                cancelContact,
+              );
               return;
             }
             botSay(
@@ -463,25 +601,19 @@ export function WifiBot({
             return;
           }
 
-          const pendingMessage =
-            payload.message || `Your payment reference is ${payload.data?.reference ?? reference}.`;
-          botSay(pendingMessage, "result");
-          setResult({
-            kind: "pay-pending",
-            message: pendingMessage,
-            reference: payload.data?.reference ?? reference,
-            supportPhone: contactPhone,
-          });
+          showPendingReference(
+            payload.message || `Your payment reference is ${resolvedReference}.`,
+            resolvedReference,
+            contactPhone,
+          );
           return;
         } catch {
           if (attempt === maxAttempts) {
-            botSay("Payment could not be confirmed right now. Keep this reference and contact support.", "result");
-            setResult({
-              kind: "pay-pending",
-              message: "Payment could not be confirmed right now. Keep this reference and contact support.",
+            showPendingReference(
+              "Payment could not be confirmed right now. Keep this reference and contact support.",
               reference,
               supportPhone,
-            });
+            );
             return;
           }
           await new Promise((resolve) => window.setTimeout(resolve, 2500));
@@ -517,7 +649,7 @@ export function WifiBot({
       const payload = (await response.json()) as {
         success: boolean;
         message: string;
-        data?: { vouchers: LookupVoucher[]; pendingReferences?: string[] };
+        data?: { vouchers: LookupVoucher[] };
       };
       if (!payload.success) {
         setFormError(payload.message);
@@ -530,7 +662,6 @@ export function WifiBot({
         kind: "codes",
         message: payload.message,
         vouchers,
-        pendingReferences: payload.data?.pendingReferences ?? [],
       });
     } catch {
       setFormError("I couldn’t look that up right now. Please try again.");
@@ -622,6 +753,7 @@ export function WifiBot({
     setIntent("buy");
     resetPurchase();
     setResult(null);
+    setPendingCheckout(null);
     setFormError(null);
     setLookupPhone("");
     setLookupPin("");
@@ -708,7 +840,7 @@ export function WifiBot({
   const menuChoices: Choice[] = [
     { id: "buy", label: "Buy WiFi" },
     { id: "codes", label: "My Vouchers" },
-    { id: "check", label: "Voucher Details" },
+    { id: "check", label: "Voucher Balance" },
   ];
 
   return (
@@ -885,8 +1017,19 @@ export function WifiBot({
           ) : null}
 
           {!typing && stage === "pay" && location && plan ? (
-            <div className="ml-9 space-y-3 rounded-2xl bg-white p-4 shadow-sm ring-1 ring-black/5">
-              <p className="text-sm font-medium">Order summary</p>
+            <div className="ml-9 space-y-3">
+              {pendingCheckout ? (
+                <PaymentReferenceCard
+                  reference={pendingCheckout.reference}
+                  supportPhone={pendingCheckout.supportPhone}
+                  locationName={pendingCheckout.locationName}
+                  planName={pendingCheckout.planName}
+                  amountKobo={pendingCheckout.amountKobo}
+                  phone={pendingCheckout.phone}
+                />
+              ) : null}
+              <div className="space-y-3 rounded-2xl bg-white p-4 shadow-sm ring-1 ring-black/5">
+                <p className="text-sm font-medium">Order summary</p>
               <dl className="space-y-1 text-sm">
                 <div className="flex justify-between gap-3">
                   <dt className="text-muted-foreground">Location</dt>
@@ -947,6 +1090,7 @@ export function WifiBot({
                   </div>
                 </>
               )}
+              </div>
             </div>
           ) : null}
 
@@ -1052,14 +1196,7 @@ export function WifiBot({
 
           {!typing && stage === "result" && result?.kind === "codes" ? (
             <div className="ml-9 space-y-3">
-              {result.vouchers.length === 0 && result.pendingReferences.length > 0 ? (
-                result.pendingReferences.map((reference) => (
-                  <div key={reference} className="rounded-2xl bg-white p-4 shadow-sm ring-1 ring-black/5">
-                    <p className="text-sm font-medium">Payment reference</p>
-                    <p className="mt-2 font-mono text-base font-semibold tracking-wide break-all">{reference}</p>
-                  </div>
-                ))
-              ) : result.vouchers.length === 0 ? (
+              {result.vouchers.length === 0 ? (
                 <p className="text-sm text-muted-foreground">{result.message}</p>
               ) : (
                 result.vouchers.map((item) => (
@@ -1117,15 +1254,14 @@ export function WifiBot({
 
           {!typing && stage === "result" && result?.kind === "pay-pending" ? (
             <div className="ml-9 space-y-3">
-              <div className="rounded-2xl bg-white p-4 shadow-sm ring-1 ring-black/5">
-                <p className="text-sm font-medium">Payment reference</p>
-                <p className="mt-2 font-mono text-base font-semibold tracking-wide break-all">{result.reference}</p>
-                <p className="mt-3 text-sm text-muted-foreground">
-                  {result.supportPhone
-                    ? `Contact support on ${result.supportPhone} to log this enquiry. Quote the reference above.`
-                    : "Contact support with this reference to log your enquiry."}
-                </p>
-              </div>
+              <PaymentReferenceCard
+                reference={result.reference}
+                supportPhone={result.supportPhone ?? supportPhone}
+                locationName={result.locationName}
+                planName={result.planName}
+                amountKobo={result.amountKobo}
+                phone={result.phone}
+              />
               <div className="flex w-full justify-center gap-4">
                 <button type="button" className="text-xs text-muted-foreground underline" onClick={goBack}>
                   Back

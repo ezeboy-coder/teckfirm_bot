@@ -32,7 +32,7 @@ export type IssuedVoucher = {
 };
 
 export type ConfirmPaymentResult =
-  | { ok: true; vouchers: IssuedVoucher[]; pending: boolean }
+  | { ok: true; vouchers: IssuedVoucher[]; pending: boolean; paid: boolean; cancelled?: boolean }
   | { ok: false; message: string; code: string; status: number };
 
 function toIssuedVoucher(order: {
@@ -109,7 +109,7 @@ export async function confirmPaystackReference(reference: string): Promise<Confi
 
   const existingVoucher = toIssuedVoucher(order);
   if (existingVoucher) {
-    return { ok: true, vouchers: [existingVoucher], pending: false };
+    return { ok: true, vouchers: [existingVoucher], pending: false, paid: true };
   }
 
   if (order.status === "MANUAL_REVIEW") {
@@ -128,7 +128,12 @@ export async function confirmPaystackReference(reference: string): Promise<Confi
       ok: true,
       vouchers: issued.vouchers,
       pending: fulfillment !== "issued" && issued.pending,
+      paid: true,
     };
+  }
+
+  if (order.status === "CANCELLED" || order.paymentStatus === "ABANDONED") {
+    return { ok: true, vouchers: [], pending: false, paid: false, cancelled: true };
   }
 
   let verified;
@@ -180,7 +185,7 @@ export async function confirmPaystackReference(reference: string): Promise<Confi
         status: 402,
       };
     }
-    return { ok: true, vouchers: [], pending: true };
+    return { ok: true, vouchers: [], pending: true, paid: false };
   }
 
   if (!paystackAmountMatchesOrder(order.totalKobo, verified.amount, verified.currency)) {
@@ -224,6 +229,7 @@ export async function confirmPaystackReference(reference: string): Promise<Confi
     ok: true,
     vouchers: issued.vouchers,
     pending: fulfillment !== "issued" && issued.pending,
+    paid: true,
   };
 }
 
@@ -234,14 +240,14 @@ function wait(ms: number) {
 export async function cancelPendingCheckout(reference: string): Promise<ConfirmPaymentResult> {
   const confirmed = await confirmPaystackReference(reference);
   if (!confirmed.ok) return confirmed;
-  if (confirmed.vouchers.length > 0 || !confirmed.pending) {
+  if (confirmed.vouchers.length > 0 || confirmed.paid || confirmed.cancelled) {
     return confirmed;
   }
 
   await wait(2500);
   const again = await confirmPaystackReference(reference);
   if (!again.ok) return again;
-  if (again.vouchers.length > 0 || !again.pending) {
+  if (again.vouchers.length > 0 || again.paid || again.cancelled) {
     return again;
   }
 
@@ -260,7 +266,7 @@ export async function cancelPendingCheckout(reference: string): Promise<ConfirmP
   }
 
   if (order.status === "CANCELLED" || order.paymentStatus === "ABANDONED") {
-    return { ok: true, vouchers: [], pending: false };
+    return { ok: true, vouchers: [], pending: false, paid: false, cancelled: true };
   }
 
   const cancelled = await markOpenOrderCancelled({
@@ -272,7 +278,7 @@ export async function cancelPendingCheckout(reference: string): Promise<ConfirmP
     return confirmPaystackReference(reference);
   }
 
-  return { ok: true, vouchers: [], pending: false };
+  return { ok: true, vouchers: [], pending: false, paid: false, cancelled: true };
 }
 
 export const paymentService = {

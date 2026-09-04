@@ -64,7 +64,7 @@ export default async function AdminLayout({ children }: { children: React.ReactN
     <div className="flex min-h-full flex-1 flex-col">
       <header className="flex items-center justify-between border-b bg-background px-4 py-3">
         <div>
-          <Logo href="/admin" />
+          <Logo />
           <p className="mt-1 text-xs text-muted-foreground">Admin · {firstName}</p>
         </div>
         <AdminSignOut />

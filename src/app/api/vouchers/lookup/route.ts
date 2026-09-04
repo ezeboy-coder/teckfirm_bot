@@ -1,7 +1,6 @@
 import { apiError, apiSuccess } from "@/lib/api/response";
 import { OMADA_FUNCTION_UNAVAILABLE_MESSAGE } from "@/lib/omada/errors";
 import { rateLimit } from "@/lib/security/rate-limit";
-import { paymentReferenceMessage } from "@/lib/utils/reference";
 import { guestVoucherLookupSchema } from "@/lib/validation/schemas";
 import { lookupGuestVouchers } from "@/services/voucher.service";
 
@@ -49,10 +48,8 @@ export async function POST(request: Request) {
 
   if (result.vouchers.length === 0) {
     return apiSuccess(
-      { vouchers: [], pendingReferences: result.pendingReferences },
-      result.pendingReferences.length > 0
-        ? paymentReferenceMessage(result.pendingReferences)
-        : "You have no unused or in-use vouchers at this location.",
+      { vouchers: [] },
+      "You have no unused or in-use vouchers at this location.",
     );
   }
 

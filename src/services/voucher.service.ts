@@ -34,7 +34,7 @@ export type LookedUpVoucher = {
 };
 
 export type GuestVoucherLookupResult =
-  | { ok: true; vouchers: LookedUpVoucher[]; pendingReferences: string[] }
+  | { ok: true; vouchers: LookedUpVoucher[] }
   | { ok: false; reason: "invalid_phone" | "not_found" | "omada_error" | "location_offline"; message?: string };
 
 function liveStatusToDb(status: GuestVoucherLiveStatus): Extract<VoucherStatus, "UNUSED" | "ACTIVE"> {
@@ -68,15 +68,10 @@ export async function lookupGuestVouchers(
 
   const location = orders[0]?.location;
   const issued = orders.flatMap((order) => (order.voucher ? [order.voucher] : []));
-  const pendingReferences = orders
-    .filter(
-      (order) => !order.voucher && order.status !== "COMPLETED" && order.fulfillmentStatus !== "COMPLETED",
-    )
-    .map((order) => order.reference);
-
   const vouchers: LookedUpVoucher[] = [];
+
   if (issued.length === 0) {
-    return { ok: true, vouchers, pendingReferences };
+    return { ok: true, vouchers };
   }
 
   if (!location) {
@@ -98,6 +93,7 @@ export async function lookupGuestVouchers(
 
     const dropIds: string[] = [];
     const keepUpdates: { id: string; status: "UNUSED" | "ACTIVE"; expiresAt: Date | null }[] = [];
+    const locationName = displayName(location.name);
 
     for (const voucher of issued) {
       const row = liveRows.get(voucher.code.trim());
@@ -116,7 +112,7 @@ export async function lookupGuestVouchers(
         code: voucher.code,
         status: facts.status,
         plan: orders.find((order) => order.voucher?.id === voucher.id)?.items[0]?.plan.name ?? "WiFi plan",
-        location: displayName(location.name),
+        location: locationName,
       });
     }
 
@@ -138,7 +134,7 @@ export async function lookupGuestVouchers(
     throw error;
   }
 
-  return { ok: true, vouchers, pendingReferences };
+  return { ok: true, vouchers };
 }
 
 export type ControllerVoucherCheck =

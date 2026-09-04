@@ -22,7 +22,7 @@ export async function saveSupportPhoneAction(
 
   const parsed = adminSupportPhoneSchema.safeParse(Object.fromEntries(formData.entries()));
   if (!parsed.success) {
-    return { error: parsed.error.issues[0]?.message ?? "Enter an 11-digit phone number." };
+    return { error: parsed.error.issues[0]?.message ?? "Enter a valid country code and phone number." };
   }
 
   try {
