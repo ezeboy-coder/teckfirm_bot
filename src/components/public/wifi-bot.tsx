@@ -203,7 +203,7 @@ export function WifiBot({
     const welcome: ChatMessage = {
       id: "welcome",
       role: "bot",
-      text: "Hi, I’m the TeckFirm WiFi assistant. You can buy a voucher in a few taps — no account needed.For Now, I can only check your voucher balance as I am still in development phase🥰",
+      text: "Hi, I’m the TeckFirm WiFi assistant. You can buy a voucher in a few taps — no account needed.",
 
     };
     if (!startInBuy) return [welcome];
@@ -833,14 +833,14 @@ export function WifiBot({
       {
         id: "welcome",
         role: "bot",
-        text: "Hi, I’m the TeckFirm WiFi assistant. You can buy a voucher in a few taps — no account needed.For Now, I can only check your voucher balance as I am still in development phase🥰",
+        text: "Hi, I’m the TeckFirm WiFi assistant. You can buy a voucher in a few taps — no account needed.",
       },
     ]);
   }
 
   const menuChoices: Choice[] = [
-    //{ id: "buy", label: "Buy WiFi" },
-    //{ id: "codes", label: "My Vouchers" },
+    { id: "buy", label: "Buy WiFi" },
+    { id: "codes", label: "My Vouchers" },
     { id: "check", label: "Voucher Balance" },
   ];
 
