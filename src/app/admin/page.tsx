@@ -2,6 +2,7 @@ import { prisma } from "@/lib/db/prisma";
 import { locationService } from "@/services/location.service";
 import { planService } from "@/services/plan.service";
 import { getSupportPhone } from "@/services/site-setting.service";
+import { nigeriaDayRange } from "@/lib/time/nigeria";
 import { formatNgnFromKobo } from "@/lib/utils/money";
 import { AddLocationForm } from "@/components/admin/add-location-form";
 import { AddPriceForm } from "@/components/admin/add-price-form";
@@ -12,11 +13,19 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 
 export default async function AdminHomePage() {
-  const [vouchersBought, revenue, locations, plans, supportPhone] = await Promise.all([
+  const { start: todayStart } = nigeriaDayRange();
+  const [vouchersBought, revenue, revenueToday, locations, plans, supportPhone] = await Promise.all([
     prisma.voucher.count(),
     prisma.payment.aggregate({
       _sum: { amountKobo: true },
       where: { status: "SUCCESS" },
+    }),
+    prisma.payment.aggregate({
+      _sum: { amountKobo: true },
+      where: {
+        status: "SUCCESS",
+        OR: [{ paidAt: { gte: todayStart } }, { paidAt: null, createdAt: { gte: todayStart } }],
+      },
     }),
     locationService.listAdminDashboard(),
     planService.listAdmin(),
@@ -24,6 +33,7 @@ export default async function AdminHomePage() {
   ]);
 
   const totalPriceKobo = revenue._sum.amountKobo ?? 0;
+  const todayPriceKobo = revenueToday._sum.amountKobo ?? 0;
 
   return (
     <div className="mx-auto max-w-5xl space-y-8">
@@ -36,12 +46,18 @@ export default async function AdminHomePage() {
         </p>
       </div>
 
-      <div className="grid gap-4 sm:grid-cols-2">
+      <div className="grid gap-4 sm:grid-cols-3">
         <Card>
           <CardHeader>
             <CardTitle>Vouchers bought</CardTitle>
           </CardHeader>
           <CardContent className="text-3xl font-semibold">{vouchersBought}</CardContent>
+        </Card>
+        <Card>
+          <CardHeader>
+            <CardTitle>Made today</CardTitle>
+          </CardHeader>
+          <CardContent className="text-3xl font-semibold">{formatNgnFromKobo(todayPriceKobo)}</CardContent>
         </Card>
         <Card>
           <CardHeader>
