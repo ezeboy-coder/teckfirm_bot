@@ -18,8 +18,8 @@ import { normalizeGuestPhone } from "@/lib/utils/phone";
 import { getEnv } from "@/lib/validation/env";
 import { getLocationById } from "@/repositories/location.repository";
 import {
-  deleteVouchersByIds,
   findPaidOrdersByPhoneAndPinHash,
+  markVouchersExpiredByIds,
   syncLiveVoucherStatuses,
 } from "@/repositories/voucher-lookup.repository";
 import { isLocationControllerLive } from "@/services/location.service";
@@ -91,7 +91,7 @@ export async function lookupGuestVouchers(
       );
     });
 
-    const dropIds: string[] = [];
+    const expireIds: string[] = [];
     const keepUpdates: { id: string; status: "UNUSED" | "ACTIVE"; expiresAt: Date | null }[] = [];
     const locationName = displayName(location.name);
 
@@ -99,7 +99,8 @@ export async function lookupGuestVouchers(
       const row = liveRows.get(voucher.code.trim());
       const facts = row ? extractOmadaVoucherFacts(row) : null;
       if (!facts || !keepLiveGuestVoucher(facts.status)) {
-        dropIds.push(voucher.id);
+        // Do not delete: removing the row made paid orders look like they still need a voucher.
+        expireIds.push(voucher.id);
         continue;
       }
 
@@ -116,11 +117,11 @@ export async function lookupGuestVouchers(
       });
     }
 
-    await deleteVouchersByIds(dropIds);
+    await markVouchersExpiredByIds(expireIds);
     await syncLiveVoucherStatuses(keepUpdates);
-    if (dropIds.length > 0) {
-      logger.info("Removed guest vouchers that are expired or gone from the controller", {
-        count: dropIds.length,
+    if (expireIds.length > 0) {
+      logger.info("Marked guest vouchers expired or gone from the controller", {
+        count: expireIds.length,
       });
     }
   } catch (error) {

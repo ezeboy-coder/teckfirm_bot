@@ -22,9 +22,13 @@ export async function findPaidOrdersByPhoneAndPinHash(
   });
 }
 
-export async function deleteVouchersByIds(ids: string[]) {
+/** Keep the order↔voucher link; only mark expired so admin activity stays accurate. */
+export async function markVouchersExpiredByIds(ids: string[]) {
   if (ids.length === 0) return;
-  await prisma.voucher.deleteMany({ where: { id: { in: ids } } });
+  await prisma.voucher.updateMany({
+    where: { id: { in: ids } },
+    data: { status: "EXPIRED", lastSyncAt: new Date() },
+  });
 }
 
 export async function syncLiveVoucherStatuses(
@@ -44,4 +48,13 @@ export async function syncLiveVoucherStatuses(
       }),
     ),
   );
+}
+
+export async function findVoucherByLocationAndCode(locationId: string, code: string) {
+  return prisma.voucher.findUnique({
+    where: {
+      locationId_code: { locationId, code },
+    },
+    select: { id: true, orderId: true },
+  });
 }

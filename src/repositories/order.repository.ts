@@ -308,12 +308,14 @@ export async function attachVoucherToPaidOrder(input: {
   const fulfilledAt = new Date();
 
   await prisma.$transaction(async (tx) => {
+    // Include COMPLETED: auto-fulfill may have marked the order done, then the voucher
+    // row was lost (or never written). Admin still needs to re-link the code.
     const claimed = await tx.order.updateMany({
       where: {
         id: input.orderId,
         locationId: input.locationId,
         paymentStatus: "SUCCESS",
-        status: { in: ["PAID", "FULFILLING", "MANUAL_REVIEW"] },
+        status: { in: ["PAID", "FULFILLING", "MANUAL_REVIEW", "COMPLETED"] },
         voucher: { is: null },
       },
       data: {

@@ -22,6 +22,7 @@ describe("admin order status", () => {
   it("flags paid orders that still need a voucher", () => {
     expect(isPaidMissingVoucher("SUCCESS", "PAID")).toBe(true);
     expect(isPaidMissingVoucher("SUCCESS", "FULFILLING")).toBe(true);
+    expect(isPaidMissingVoucher("SUCCESS", "COMPLETED")).toBe(true);
     expect(isPaidMissingVoucher("SUCCESS", "COMPLETED", true)).toBe(false);
     expect(isPaidMissingVoucher("PENDING", "PAYMENT_PENDING")).toBe(false);
   });

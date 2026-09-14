@@ -28,6 +28,7 @@ import {
   markOpenOrderCancelled,
 } from "@/repositories/order.repository";
 import { getPlanById } from "@/repositories/plan.repository";
+import { findVoucherByLocationAndCode } from "@/repositories/voucher-lookup.repository";
 import { writeAuditLog } from "@/services/audit.service";
 import { isLocationControllerLive } from "@/services/location.service";
 
@@ -204,24 +205,34 @@ export async function attachIssuedVoucher(input: {
   if (!plan) {
     throw new Error("That order has no plan.");
   }
-  if (
-    !isPaidMissingVoucher(order.paymentStatus, order.status, Boolean(order.voucher))
-  ) {
+
+  // Idempotent: voucher already linked (stale "Add voucher" UI).
+  if (order.voucher) {
+    return;
+  }
+
+  if (!isPaidMissingVoucher(order.paymentStatus, order.status, false)) {
     throw new Error("This order is not a paid purchase that still needs a voucher.");
   }
+
+  const code = input.voucherCode.trim();
 
   try {
     await attachVoucherToPaidOrder({
       orderId: order.id,
       locationId: order.locationId,
       planId: plan.id,
-      code: input.voucherCode,
+      code,
       deviceLimit: plan.deviceLimit,
       dataAllowance: plan.dataAllowance,
       durationMinutes: toDurationMinutes(plan.duration, plan.durationUnit),
     });
   } catch (error) {
     if (error instanceof Prisma.PrismaClientKnownRequestError && error.code === "P2002") {
+      const existing = await findVoucherByLocationAndCode(order.locationId, code);
+      if (existing?.orderId === order.id) {
+        return;
+      }
       throw new Error("That voucher code is already recorded at this location.");
     }
     throw error;
