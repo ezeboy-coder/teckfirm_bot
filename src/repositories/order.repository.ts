@@ -439,3 +439,22 @@ export async function findOrderWithVoucher(orderId: string) {
     },
   });
 }
+
+export async function listOpenPendingOrdersForLocation(locationId: string) {
+  return prisma.order.findMany({
+    where: {
+      locationId,
+      paymentStatus: { in: ["INITIALIZED", "PENDING"] },
+      status: { in: ["PENDING", "PAYMENT_PENDING"] },
+      voucher: { is: null },
+    },
+    orderBy: { createdAt: "desc" },
+    select: {
+      id: true,
+      reference: true,
+      totalKobo: true,
+      status: true,
+      paymentStatus: true,
+    },
+  });
+}

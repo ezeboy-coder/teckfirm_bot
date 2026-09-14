@@ -1,4 +1,5 @@
-import { activityStatusLabel, isOpenPendingPayment, isPaidMissingVoucher, isStalePendingOrder } from "@/lib/admin/order-status";
+import { parseActivityDateFilter } from "@/lib/admin/activity-date";
+import { activityStatusLabel, isOpenPendingPayment, isPaidMissingVoucher, isStalePendingOrder, parseActivityStatusFilter } from "@/lib/admin/order-status";
 import { LOCATION_CONTROLLER_OFFLINE_MESSAGE } from "@/lib/locations/availability";
 import { locationDisplayName } from "@/lib/locations/label";
 import { boughtDuringRange, countUniqueBuyers } from "@/lib/admin/buyers";
@@ -20,6 +21,7 @@ import {
   updateLocation,
 } from "@/repositories/location.repository";
 import {
+  countLocationActivity,
   countLocationRecords,
   countVouchers,
   countVouchersForLocations,
@@ -119,22 +121,48 @@ export const locationService = {
     });
   },
 
-  async getAdminDashboard(id: string) {
+  async getAdminDashboard(
+    id: string,
+    page = 1,
+    statusFilterInput: string | null = null,
+    whenInput: string | null = null,
+    onInput: string | null = null,
+  ) {
     const location = await getAdminLocationRecord(id);
     if (!location || isDemoName(location.name) || !location.active) {
       return null;
     }
 
+    const statusFilter = parseActivityStatusFilter(statusFilterInput);
+    const dateFilter = parseActivityDateFilter({ when: whenInput, on: onInput });
+    const pageSize = 10;
+    const safePage = Number.isFinite(page) && page > 0 ? Math.floor(page) : 1;
     const { start, next } = nigeriaDayRange();
-    const [vouchersOverall, vouchersToday, revenueOverall, revenueToday, buyers, activity] =
+    const customNeedsDate = dateFilter.preset === "custom" && (!dateFilter.start || !dateFilter.next);
+    const [vouchersOverall, vouchersToday, revenueOverall, revenueToday, buyers, activityTotal] =
       await Promise.all([
         countVouchers(id),
         countVouchers(id, start),
         sumSuccessfulPayments(id),
         sumSuccessfulPayments(id, start),
         listPaidOrderBuyers([id]),
-        listLocationActivity(id),
+        customNeedsDate
+          ? Promise.resolve(0)
+          : countLocationActivity(id, statusFilter, dateFilter.start, dateFilter.next),
       ]);
+
+    const totalPages = Math.max(1, Math.ceil(activityTotal / pageSize));
+    const currentPage = Math.min(safePage, totalPages);
+    const activity = customNeedsDate
+      ? []
+      : await listLocationActivity(
+          id,
+          pageSize,
+          (currentPage - 1) * pageSize,
+          statusFilter,
+          dateFilter.start,
+          dateFilter.next,
+        );
 
     return {
       location,
@@ -145,6 +173,14 @@ export const locationService = {
         buyersToday: countUniqueBuyers(buyers.filter((row) => boughtDuringRange(row, start, next))),
         revenueOverallKobo: revenueOverall._sum.amountKobo ?? 0,
         revenueTodayKobo: revenueToday._sum.amountKobo ?? 0,
+      },
+      activityPage: {
+        page: currentPage,
+        pageSize,
+        total: activityTotal,
+        totalPages,
+        statusFilter,
+        dateFilter,
       },
       activity: activity.map((order) => ({
         id: order.id,

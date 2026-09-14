@@ -2,7 +2,7 @@ import { prisma } from "@/lib/db/prisma";
 import { locationService } from "@/services/location.service";
 import { planService } from "@/services/plan.service";
 import { getSupportPhone } from "@/services/site-setting.service";
-import { nigeriaDayRange } from "@/lib/time/nigeria";
+import { nigeriaDayRange, nigeriaYesterdayRange } from "@/lib/time/nigeria";
 import { formatNgnFromKobo } from "@/lib/utils/money";
 import { AddLocationForm } from "@/components/admin/add-location-form";
 import { AddPriceForm } from "@/components/admin/add-price-form";
@@ -12,28 +12,42 @@ import { SupportPhoneForm } from "@/components/admin/support-phone-form";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 
+function successfulPaymentDayWhere(start: Date, next: Date) {
+  return {
+    status: "SUCCESS" as const,
+    OR: [
+      { paidAt: { gte: start, lt: next } },
+      { paidAt: null, createdAt: { gte: start, lt: next } },
+    ],
+  };
+}
+
 export default async function AdminHomePage() {
-  const { start: todayStart } = nigeriaDayRange();
-  const [vouchersBought, revenue, revenueToday, locations, plans, supportPhone] = await Promise.all([
-    prisma.voucher.count(),
-    prisma.payment.aggregate({
-      _sum: { amountKobo: true },
-      where: { status: "SUCCESS" },
-    }),
-    prisma.payment.aggregate({
-      _sum: { amountKobo: true },
-      where: {
-        status: "SUCCESS",
-        OR: [{ paidAt: { gte: todayStart } }, { paidAt: null, createdAt: { gte: todayStart } }],
-      },
-    }),
-    locationService.listAdminDashboard(),
-    planService.listAdmin(),
-    getSupportPhone(),
-  ]);
+  const { start: todayStart, next: todayNext } = nigeriaDayRange();
+  const { start: yesterdayStart, next: yesterdayNext } = nigeriaYesterdayRange();
+  const [vouchersBought, revenue, revenueToday, revenueYesterday, locations, plans, supportPhone] =
+    await Promise.all([
+      prisma.voucher.count(),
+      prisma.payment.aggregate({
+        _sum: { amountKobo: true },
+        where: { status: "SUCCESS" },
+      }),
+      prisma.payment.aggregate({
+        _sum: { amountKobo: true },
+        where: successfulPaymentDayWhere(todayStart, todayNext),
+      }),
+      prisma.payment.aggregate({
+        _sum: { amountKobo: true },
+        where: successfulPaymentDayWhere(yesterdayStart, yesterdayNext),
+      }),
+      locationService.listAdminDashboard(),
+      planService.listAdmin(),
+      getSupportPhone(),
+    ]);
 
   const totalPriceKobo = revenue._sum.amountKobo ?? 0;
   const todayPriceKobo = revenueToday._sum.amountKobo ?? 0;
+  const yesterdayPriceKobo = revenueYesterday._sum.amountKobo ?? 0;
 
   return (
     <div className="mx-auto max-w-5xl space-y-8">
@@ -55,9 +69,18 @@ export default async function AdminHomePage() {
         </Card>
         <Card>
           <CardHeader>
-            <CardTitle>Made today</CardTitle>
+            <CardTitle>Daily made</CardTitle>
           </CardHeader>
-          <CardContent className="text-3xl font-semibold">{formatNgnFromKobo(todayPriceKobo)}</CardContent>
+          <CardContent className="grid grid-cols-2 gap-4">
+            <div>
+              <p className="text-sm text-muted-foreground">Made today</p>
+              <p className="text-3xl font-semibold">{formatNgnFromKobo(todayPriceKobo)}</p>
+            </div>
+            <div className="border-l pl-4">
+              <p className="text-sm text-muted-foreground">Made yesterday</p>
+              <p className="text-3xl font-semibold">{formatNgnFromKobo(yesterdayPriceKobo)}</p>
+            </div>
+          </CardContent>
         </Card>
         <Card>
           <CardHeader>

@@ -144,6 +144,10 @@ export const adminOrderStatusSchema = z.discriminatedUnion("intent", [
       .trim()
       .regex(/^\d{6}$/, "Enter the 6-digit voucher code"),
   }),
+  z.object({
+    intent: z.literal("refresh_pending"),
+    locationId: z.string().trim().min(1, "Choose a location"),
+  }),
 ]);
 
 export const adminLocationCreateSchema = z

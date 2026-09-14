@@ -1,18 +1,29 @@
 import { Prisma } from "@prisma/client";
 import { hashRetrievalPin } from "@/lib/security/retrieval-pin";
+import { isPaidMissingVoucher, isStalePendingOrder } from "@/lib/admin/order-status";
 import { LOCATION_CONTROLLER_OFFLINE_MESSAGE } from "@/lib/locations/availability";
+import { logger } from "@/lib/logger";
+import {
+  isFailedPaystackCharge,
+  isSuccessfulPaystackCharge,
+  paystackAmountMatchesOrder,
+  sanitizePaystackPayload,
+  verifyPaystackTransaction,
+} from "@/lib/paystack";
+import { PaystackError, PaystackNotConfiguredError } from "@/lib/paystack/errors";
 import { guestCheckoutEmail } from "@/lib/utils/guest";
 import { normalizeGuestPhone } from "@/lib/utils/phone";
 import { generateOrderReference } from "@/lib/utils/reference";
 import { getEnv } from "@/lib/validation/env";
 import { toDurationMinutes } from "@/lib/utils/duration";
-import { isPaidMissingVoucher, isStalePendingOrder } from "@/lib/admin/order-status";
 import { getLocationById } from "@/repositories/location.repository";
 import {
+  applyVerifiedPayment,
   attachVoucherToPaidOrder,
   completeManualPaidOrder,
   createGuestOrder,
   findOrderWithVoucher,
+  listOpenPendingOrdersForLocation,
   markOpenOrderCancelled,
 } from "@/repositories/order.repository";
 import { getPlanById } from "@/repositories/plan.repository";
@@ -224,9 +235,145 @@ export async function attachIssuedVoucher(input: {
   });
 }
 
+export type AdminPaymentSyncSummary = {
+  checked: number;
+  paid: number;
+  failed: number;
+  pending: number;
+  manualReview: number;
+  errors: number;
+};
+
+export async function syncLocationPendingPayments(input: {
+  locationId: string;
+  actorId: string;
+}): Promise<AdminPaymentSyncSummary> {
+  const orders = await listOpenPendingOrdersForLocation(input.locationId);
+  const summary: AdminPaymentSyncSummary = {
+    checked: orders.length,
+    paid: 0,
+    failed: 0,
+    pending: 0,
+    manualReview: 0,
+    errors: 0,
+  };
+
+  for (const order of orders) {
+    try {
+      const outcome = await syncOnePendingOrderFromPaystack({
+        orderId: order.id,
+        reference: order.reference,
+        totalKobo: order.totalKobo,
+        actorId: input.actorId,
+      });
+      if (outcome === "paid") summary.paid += 1;
+      else if (outcome === "failed") summary.failed += 1;
+      else if (outcome === "manual_review") summary.manualReview += 1;
+      else summary.pending += 1;
+    } catch (error) {
+      if (error instanceof PaystackNotConfiguredError) {
+        throw error;
+      }
+      summary.errors += 1;
+      logger.warn("Admin Paystack status refresh failed for order", {
+        orderId: order.id,
+        error: error instanceof Error ? error.message : "unknown",
+      });
+    }
+  }
+
+  await writeAuditLog({
+    actorId: input.actorId,
+    action: "order.paystack_refresh",
+    resource: "Location",
+    resourceId: input.locationId,
+    newData: summary,
+  });
+
+  return summary;
+}
+
+async function syncOnePendingOrderFromPaystack(input: {
+  orderId: string;
+  reference: string;
+  totalKobo: number;
+  actorId: string;
+}): Promise<"paid" | "failed" | "pending" | "manual_review"> {
+  let verified;
+  try {
+    verified = await verifyPaystackTransaction(input.reference);
+  } catch (error) {
+    if (error instanceof PaystackNotConfiguredError) {
+      throw error;
+    }
+    logger.warn("Admin Paystack status check failed", {
+      orderId: input.orderId,
+      error: error instanceof PaystackError ? error.code : "unknown",
+    });
+    throw new Error("Could not read that payment status from Paystack right now.");
+  }
+
+  const sanitized = sanitizePaystackPayload({
+    status: verified.status,
+    amount: verified.amount,
+    currency: verified.currency,
+    reference: verified.reference,
+    channel: verified.channel,
+    paid_at: verified.paidAt,
+  });
+  const providerTransactionId = verified.id !== null ? String(verified.id) : null;
+  const paidAt = verified.paidAt ? new Date(verified.paidAt) : new Date();
+
+  if (isSuccessfulPaystackCharge(verified.status)) {
+    if (!paystackAmountMatchesOrder(input.totalKobo, verified.amount, verified.currency)) {
+      await applyVerifiedPayment({
+        orderId: input.orderId,
+        paymentStatus: "SUCCESS",
+        orderStatus: "MANUAL_REVIEW",
+        providerTransactionId,
+        channel: verified.channel,
+        gatewayResponse: verified.gatewayResponse,
+        paidAt,
+        sanitized,
+      });
+      return "manual_review";
+    }
+
+    await applyVerifiedPayment({
+      orderId: input.orderId,
+      paymentStatus: "SUCCESS",
+      orderStatus: "PAID",
+      providerTransactionId,
+      channel: verified.channel,
+      gatewayResponse: verified.gatewayResponse,
+      paidAt,
+      sanitized,
+    });
+    return "paid";
+  }
+
+  // Only hard Paystack failures become Failed. Ongoing/abandoned stay Pending.
+  if (isFailedPaystackCharge(verified.status)) {
+    await applyVerifiedPayment({
+      orderId: input.orderId,
+      paymentStatus: "FAILED",
+      orderStatus: "FAILED",
+      providerTransactionId,
+      channel: verified.channel,
+      gatewayResponse: verified.gatewayResponse,
+      paidAt: null,
+      sanitized,
+    });
+    return "failed";
+  }
+
+  return "pending";
+}
+
 export const orderService = {
   createGuestCheckout,
   cancelStalePendingOrder,
   markStalePendingPaidWithVoucher,
   attachIssuedVoucher,
+  syncLocationPendingPayments,
 };

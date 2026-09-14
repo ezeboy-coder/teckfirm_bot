@@ -3,13 +3,15 @@
 import { revalidatePath } from "next/cache";
 import { getCurrentSession } from "@/lib/auth/session";
 import { hasMinRole } from "@/lib/auth/roles";
+import { PaystackNotConfiguredError } from "@/lib/paystack/errors";
 import { adminOrderStatusSchema } from "@/lib/validation/schemas";
-import { orderService } from "@/services/order.service";
+import { orderService, type AdminPaymentSyncSummary } from "@/services/order.service";
 
 export type AdminOrderActionState = {
   error?: string;
   success?: boolean;
-  intent?: "paid" | "cancelled" | "attach_voucher";
+  intent?: "paid" | "cancelled" | "attach_voucher" | "refresh_pending";
+  summary?: AdminPaymentSyncSummary;
 };
 
 async function requireCatalogAdmin() {
@@ -39,6 +41,16 @@ export async function updateLocationOrderAction(
   }
 
   try {
+    if (parsed.data.intent === "refresh_pending") {
+      const summary = await orderService.syncLocationPendingPayments({
+        locationId: parsed.data.locationId,
+        actorId: session.user.id,
+      });
+      revalidatePath(`/admin/locations/${parsed.data.locationId}`);
+      revalidatePath("/admin");
+      return { success: true, intent: "refresh_pending", summary };
+    }
+
     if (parsed.data.intent === "cancelled") {
       await orderService.cancelStalePendingOrder({
         orderId: parsed.data.orderId,
@@ -61,6 +73,9 @@ export async function updateLocationOrderAction(
       });
     }
   } catch (error) {
+    if (error instanceof PaystackNotConfiguredError) {
+      return { error: error.message };
+    }
     const message = error instanceof Error ? error.message : "Could not update that order.";
     return { error: message };
   }

@@ -124,7 +124,7 @@ export function LocationOrderStatus({
           Add voucher · {referenceTail}
         </Button>
         <Dialog
-          open={dialog === "attach_voucher" && !state.success}
+          open={dialog === "attach_voucher" && !(state.success && state.intent === "attach_voucher")}
           onOpenChange={(open) => setDialog(open ? "attach_voucher" : null)}
         >
           <DialogContent>

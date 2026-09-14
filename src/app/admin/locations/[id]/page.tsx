@@ -6,7 +6,13 @@ import { formatNgnFromKobo } from "@/lib/utils/money";
 import { locationService } from "@/services/location.service";
 import { DeleteLocationButton } from "@/components/admin/delete-location-button";
 import { EditLocationNameForm } from "@/components/admin/edit-location-name-form";
+import {
+  ActivityDateControls,
+  ActivityStatusControls,
+} from "@/components/admin/activity-status-controls";
+import { activityHref } from "@/lib/admin/activity-href";
 import { LocationOrderStatus } from "@/components/admin/location-order-status";
+import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import {
   Table,
@@ -21,16 +27,45 @@ export const dynamic = "force-dynamic";
 
 export default async function ManageLocationPage({
   params,
+  searchParams,
 }: {
   params: Promise<{ id: string }>;
+  searchParams: Promise<{ page?: string; status?: string; when?: string; on?: string }>;
 }) {
   const { id } = await params;
-  const dashboard = await locationService.getAdminDashboard(id);
+  const query = await searchParams;
+  const page = Number.parseInt(query.page ?? "1", 10);
+  const dashboard = await locationService.getAdminDashboard(
+    id,
+    page,
+    query.status ?? null,
+    query.when ?? null,
+    query.on ?? null,
+  );
   if (!dashboard) {
     notFound();
   }
 
-  const { location, stats, activity } = dashboard;
+  const { location, stats, activity, activityPage } = dashboard;
+  const from =
+    activityPage.total === 0 ? 0 : (activityPage.page - 1) * activityPage.pageSize + 1;
+  const to = Math.min(activityPage.page * activityPage.pageSize, activityPage.total);
+  const statusFilter = activityPage.statusFilter;
+  const dateFilter = activityPage.dateFilter;
+  const pageHref = (nextPage: number) =>
+    activityHref(location.id, {
+      status: statusFilter,
+      when: dateFilter.preset,
+      on: dateFilter.on,
+      page: nextPage,
+    });
+
+  const emptyMessage =
+    dateFilter.preset === "custom" && !dateFilter.start
+      ? "Pick a date to filter activity."
+      : statusFilter === "all" && dateFilter.preset === "all"
+        ? "No purchases at this location yet."
+        : "No purchases match these filters.";
 
   return (
     <div className="mx-auto max-w-5xl space-y-8">
@@ -113,49 +148,109 @@ export default async function ManageLocationPage({
       </Card>
 
       <Card>
-        <CardHeader>
+        <CardHeader className="flex flex-row flex-wrap items-center justify-between gap-3 space-y-0">
           <CardTitle>Activity</CardTitle>
+          <ActivityDateControls
+            locationId={location.id}
+            statusFilter={statusFilter}
+            dateFilter={dateFilter}
+          />
         </CardHeader>
-        <CardContent>
-          {activity.length === 0 ? (
-            <p className="text-sm text-muted-foreground">No purchases at this location yet.</p>
+        <CardContent className="space-y-4">
+          {activityPage.total === 0 ? (
+            <div className="space-y-3">
+              <div className="flex justify-end">
+                <ActivityStatusControls
+                  locationId={location.id}
+                  statusFilter={statusFilter}
+                  dateFilter={dateFilter}
+                />
+              </div>
+              <p className="text-sm text-muted-foreground">{emptyMessage}</p>
+            </div>
           ) : (
-            <Table>
-              <TableHeader>
-                <TableRow>
-                  <TableHead>When</TableHead>
-                  <TableHead>Buyer</TableHead>
-                  <TableHead>Plan</TableHead>
-                  <TableHead>Amount</TableHead>
-                  <TableHead>Status</TableHead>
-                </TableRow>
-              </TableHeader>
-              <TableBody>
-                {activity.map((row) => (
-                  <TableRow key={row.id}>
-                    <TableCell>{formatLagosDateTime(row.at)}</TableCell>
-                    <TableCell>
-                      <span className="block">{row.buyer}</span>
-                      <span className="text-xs text-muted-foreground">{row.contact}</span>
-                    </TableCell>
-                    <TableCell>{row.plan}</TableCell>
-                    <TableCell>{formatNgnFromKobo(row.amountKobo)}</TableCell>
-                    <TableCell>
-                      <LocationOrderStatus
-                        orderId={row.id}
+            <>
+              <Table>
+                <TableHeader>
+                  <TableRow>
+                    <TableHead>When</TableHead>
+                    <TableHead>Buyer</TableHead>
+                    <TableHead>Plan</TableHead>
+                    <TableHead>Amount</TableHead>
+                    <TableHead>
+                      <ActivityStatusControls
                         locationId={location.id}
-                        statusLabel={row.statusLabel}
-                        createdAt={row.createdAt}
-                        isOpenPending={row.isOpenPending}
-                        needsVoucher={row.needsVoucher}
-                        referenceTail={row.referenceTail}
-                        canResolve={row.canResolve}
+                        statusFilter={statusFilter}
+                        dateFilter={dateFilter}
                       />
-                    </TableCell>
+                    </TableHead>
                   </TableRow>
-                ))}
-              </TableBody>
-            </Table>
+                </TableHeader>
+                <TableBody>
+                  {activity.map((row) => (
+                    <TableRow key={row.id}>
+                      <TableCell>{formatLagosDateTime(row.at)}</TableCell>
+                      <TableCell>
+                        <span className="block">{row.buyer}</span>
+                        <span className="text-xs text-muted-foreground">{row.contact}</span>
+                      </TableCell>
+                      <TableCell>{row.plan}</TableCell>
+                      <TableCell>{formatNgnFromKobo(row.amountKobo)}</TableCell>
+                      <TableCell>
+                        <LocationOrderStatus
+                          orderId={row.id}
+                          locationId={location.id}
+                          statusLabel={row.statusLabel}
+                          createdAt={row.createdAt}
+                          isOpenPending={row.isOpenPending}
+                          needsVoucher={row.needsVoucher}
+                          referenceTail={row.referenceTail}
+                          canResolve={row.canResolve}
+                        />
+                      </TableCell>
+                    </TableRow>
+                  ))}
+                </TableBody>
+              </Table>
+              <div className="flex flex-wrap items-center justify-between gap-3">
+                <p className="text-sm text-muted-foreground">
+                  Showing {from}–{to} of {activityPage.total}
+                </p>
+                <div className="flex items-center gap-2">
+                  {activityPage.page > 1 ? (
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      className="h-8"
+                      render={<Link href={pageHref(activityPage.page - 1)} scroll={false} />}
+                    >
+                      Previous
+                    </Button>
+                  ) : (
+                    <Button variant="outline" size="sm" className="h-8" disabled>
+                      Previous
+                    </Button>
+                  )}
+                  <span className="text-sm text-muted-foreground">
+                    Page {activityPage.page} of {activityPage.totalPages}
+                  </span>
+                  {activityPage.page < activityPage.totalPages ? (
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      className="h-8"
+                      render={<Link href={pageHref(activityPage.page + 1)} scroll={false} />}
+                    >
+                      Next
+                    </Button>
+                  ) : (
+                    <Button variant="outline" size="sm" className="h-8" disabled>
+                      Next
+                    </Button>
+                  )}
+                </div>
+              </div>
+            </>
           )}
         </CardContent>
       </Card>

@@ -1,4 +1,53 @@
+import { Prisma } from "@prisma/client";
 import { prisma } from "@/lib/db/prisma";
+import {
+  activityStatusFilterWhere,
+  type ActivityStatusFilter,
+} from "@/lib/admin/order-status";
+
+function activityStatusSql(filter: ActivityStatusFilter): Prisma.Sql {
+  if (filter === "all") return Prisma.empty;
+  if (filter === "cancelled") {
+    return Prisma.sql`AND ("status" = 'CANCELLED' OR "paymentStatus" = 'ABANDONED')`;
+  }
+  if (filter === "paid") {
+    return Prisma.sql`AND "paymentStatus" = 'SUCCESS' AND "status" <> 'CANCELLED'`;
+  }
+  if (filter === "failed") {
+    return Prisma.sql`AND "status" <> 'CANCELLED'
+      AND "paymentStatus" NOT IN ('ABANDONED', 'SUCCESS')
+      AND ("status" = 'FAILED' OR "paymentStatus" = 'FAILED')`;
+  }
+  if (filter === "refunded") {
+    return Prisma.sql`AND "status" <> 'CANCELLED'
+      AND "paymentStatus" NOT IN ('ABANDONED', 'SUCCESS', 'FAILED')
+      AND ("status" = 'REFUNDED' OR "paymentStatus" IN ('REFUNDED', 'REVERSED'))`;
+  }
+  if (filter === "needs_review") {
+    return Prisma.sql`AND "status" = 'MANUAL_REVIEW'
+      AND "paymentStatus" NOT IN ('ABANDONED', 'SUCCESS', 'FAILED', 'REFUNDED', 'REVERSED')`;
+  }
+  return Prisma.sql`AND "status" NOT IN ('CANCELLED', 'FAILED', 'REFUNDED', 'MANUAL_REVIEW')
+    AND "paymentStatus" NOT IN ('ABANDONED', 'SUCCESS', 'FAILED', 'REFUNDED', 'REVERSED')`;
+}
+
+function activityDateSql(start: Date | null, next: Date | null): Prisma.Sql {
+  if (!start || !next) return Prisma.empty;
+  return Prisma.sql`AND (
+    ("paidAt" IS NOT NULL AND "paidAt" >= ${start} AND "paidAt" < ${next})
+    OR ("paidAt" IS NULL AND "createdAt" >= ${start} AND "createdAt" < ${next})
+  )`;
+}
+
+function activityDateWhere(start: Date | null, next: Date | null): Prisma.OrderWhereInput | undefined {
+  if (!start || !next) return undefined;
+  return {
+    OR: [
+      { paidAt: { gte: start, lt: next } },
+      { AND: [{ paidAt: null }, { createdAt: { gte: start, lt: next } }] },
+    ],
+  };
+}
 
 export async function getAdminLocationRecord(id: string) {
   return prisma.location.findFirst({
@@ -87,11 +136,57 @@ export async function countVouchers(locationId: string, createdAtFrom?: Date) {
   });
 }
 
-export async function listLocationActivity(locationId: string, take = 50) {
-  return prisma.order.findMany({
-    where: { locationId },
-    orderBy: { createdAt: "desc" },
-    take,
+export async function countLocationActivity(
+  locationId: string,
+  statusFilter: ActivityStatusFilter = "all",
+  start: Date | null = null,
+  next: Date | null = null,
+) {
+  if ((start && !next) || (!start && next)) {
+    return 0;
+  }
+
+  const statusWhere = activityStatusFilterWhere(statusFilter);
+  const dateWhere = activityDateWhere(start, next);
+  return prisma.order.count({
+    where: {
+      locationId,
+      ...(statusWhere ?? {}),
+      ...(dateWhere ?? {}),
+    },
+  });
+}
+
+export async function listLocationActivity(
+  locationId: string,
+  take = 10,
+  skip = 0,
+  statusFilter: ActivityStatusFilter = "all",
+  start: Date | null = null,
+  next: Date | null = null,
+) {
+  if ((start && !next) || (!start && next)) {
+    return [];
+  }
+
+  const statusSql = activityStatusSql(statusFilter);
+  const dateSql = activityDateSql(start, next);
+  const rows = await prisma.$queryRaw<Array<{ id: string }>>`
+    SELECT id
+    FROM "Order"
+    WHERE "locationId" = ${locationId}
+    ${statusSql}
+    ${dateSql}
+    ORDER BY COALESCE("paidAt", "createdAt") DESC, "createdAt" DESC, id DESC
+    LIMIT ${take} OFFSET ${skip}
+  `;
+
+  if (rows.length === 0) {
+    return [];
+  }
+
+  const orders = await prisma.order.findMany({
+    where: { id: { in: rows.map((row) => row.id) } },
     select: {
       id: true,
       reference: true,
@@ -110,5 +205,11 @@ export async function listLocationActivity(locationId: string, take = 50) {
         take: 1,
       },
     },
+  });
+
+  const byId = new Map(orders.map((order) => [order.id, order]));
+  return rows.flatMap((row) => {
+    const order = byId.get(row.id);
+    return order ? [order] : [];
   });
 }
