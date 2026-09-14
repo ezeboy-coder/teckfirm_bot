@@ -7,6 +7,7 @@ import {
 import { PaystackError, PaystackNotConfiguredError } from "@/lib/paystack/errors";
 import { sanitizePaystackPayload } from "@/lib/paystack/sanitize";
 import {
+  isCancelledPaystackCharge,
   isFailedPaystackCharge,
   isSuccessfulPaystackCharge,
   paystackAmountMatchesOrder,
@@ -167,7 +168,7 @@ export async function confirmPaystackReference(reference: string): Promise<Confi
   const paidAt = verified.paidAt ? new Date(verified.paidAt) : new Date();
 
   if (!isSuccessfulPaystackCharge(verified.status)) {
-    if (isFailedPaystackCharge(verified.status)) {
+    if (isFailedPaystackCharge(verified.status) || isCancelledPaystackCharge(verified.status)) {
       await applyVerifiedPayment({
         orderId: order.id,
         paymentStatus: "FAILED",

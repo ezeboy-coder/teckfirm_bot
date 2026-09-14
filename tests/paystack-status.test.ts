@@ -16,10 +16,11 @@ describe("Paystack charge status", () => {
     expect(isCancelledPaystackCharge("failed")).toBe(false);
   });
 
-  it("keeps abandoned and pending charges open until they succeed or fail", () => {
-    expect(isPendingPaystackCharge("abandoned")).toBe(true);
+  it("keeps only open charges pending until they succeed or fail", () => {
     expect(isPendingPaystackCharge("pending")).toBe(true);
     expect(isPendingPaystackCharge("ongoing")).toBe(true);
+    expect(isPendingPaystackCharge("abandoned")).toBe(false);
+    expect(isPendingPaystackCharge("cancelled")).toBe(false);
     expect(isPendingPaystackCharge("success")).toBe(false);
     expect(isPendingPaystackCharge("failed")).toBe(false);
   });

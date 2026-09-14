@@ -4,6 +4,7 @@ import { isPaidMissingVoucher, isStalePendingOrder } from "@/lib/admin/order-sta
 import { LOCATION_CONTROLLER_OFFLINE_MESSAGE } from "@/lib/locations/availability";
 import { logger } from "@/lib/logger";
 import {
+  isCancelledPaystackCharge,
   isFailedPaystackCharge,
   isSuccessfulPaystackCharge,
   paystackAmountMatchesOrder,
@@ -352,8 +353,9 @@ async function syncOnePendingOrderFromPaystack(input: {
     return "paid";
   }
 
-  // Only hard Paystack failures become Failed. Ongoing/abandoned stay Pending.
-  if (isFailedPaystackCharge(verified.status)) {
+  // Terminal Paystack outcomes (failed, reversed, abandoned, cancelled) become Failed.
+  // Only still-open statuses such as pending/ongoing stay Pending.
+  if (isFailedPaystackCharge(verified.status) || isCancelledPaystackCharge(verified.status)) {
     await applyVerifiedPayment({
       orderId: input.orderId,
       paymentStatus: "FAILED",

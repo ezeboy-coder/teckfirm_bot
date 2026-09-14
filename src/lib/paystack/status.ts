@@ -13,7 +13,11 @@ export function isCancelledPaystackCharge(status: string): boolean {
 }
 
 export function isPendingPaystackCharge(status: string): boolean {
-  return !isSuccessfulPaystackCharge(status) && !isFailedPaystackCharge(status);
+  return (
+    !isSuccessfulPaystackCharge(status) &&
+    !isFailedPaystackCharge(status) &&
+    !isCancelledPaystackCharge(status)
+  );
 }
 
 export function paystackAmountMatchesOrder(orderKobo: number, paystackAmountKobo: number, currency: string) {
