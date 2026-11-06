@@ -74,39 +74,39 @@ export default async function AdminHomePage() {
         </p>
       </div>
 
-      <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
-        <Card>
+      <div className="grid items-stretch gap-4 sm:grid-cols-2 lg:grid-cols-5">
+        <Card className="h-full">
           <CardHeader>
             <CardTitle>Vouchers bought</CardTitle>
           </CardHeader>
-          <CardContent className="text-3xl font-semibold">{vouchersBought}</CardContent>
+          <CardContent className="text-3xl font-semibold tabular-nums">{vouchersBought}</CardContent>
         </Card>
-        <Card>
+        <Card className="h-full lg:col-span-2">
           <CardHeader>
             <CardTitle>Daily made</CardTitle>
           </CardHeader>
-          <CardContent className="grid grid-cols-2 gap-4">
-            <div>
+          <CardContent className="grid min-w-0 grid-cols-2 gap-4">
+            <div className="min-w-0">
               <p className="text-sm text-muted-foreground">Made today</p>
-              <p className="text-3xl font-semibold">{formatNgnFromKobo(todayPriceKobo)}</p>
+              <p className="text-3xl font-semibold tabular-nums">{formatNgnFromKobo(todayPriceKobo)}</p>
             </div>
-            <div className="border-l pl-4">
+            <div className="min-w-0 border-l pl-4">
               <p className="text-sm text-muted-foreground">Made yesterday</p>
-              <p className="text-3xl font-semibold">{formatNgnFromKobo(yesterdayPriceKobo)}</p>
+              <p className="text-3xl font-semibold tabular-nums">{formatNgnFromKobo(yesterdayPriceKobo)}</p>
             </div>
           </CardContent>
         </Card>
-        <Card>
+        <Card className="h-full">
           <CardHeader>
             <CardTitle>Made this month</CardTitle>
           </CardHeader>
-          <CardContent className="text-3xl font-semibold">{formatNgnFromKobo(monthPriceKobo)}</CardContent>
+          <CardContent className="text-3xl font-semibold tabular-nums">{formatNgnFromKobo(monthPriceKobo)}</CardContent>
         </Card>
-        <Card>
+        <Card className="h-full">
           <CardHeader>
             <CardTitle>Total made</CardTitle>
           </CardHeader>
-          <CardContent className="text-3xl font-semibold">{formatNgnFromKobo(totalPriceKobo)}</CardContent>
+          <CardContent className="text-3xl font-semibold tabular-nums">{formatNgnFromKobo(totalPriceKobo)}</CardContent>
         </Card>
       </div>
 
