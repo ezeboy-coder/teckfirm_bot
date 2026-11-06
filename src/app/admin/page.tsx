@@ -2,7 +2,7 @@ import { prisma } from "@/lib/db/prisma";
 import { locationService } from "@/services/location.service";
 import { planService } from "@/services/plan.service";
 import { getSupportPhone } from "@/services/site-setting.service";
-import { nigeriaDayRange, nigeriaYesterdayRange } from "@/lib/time/nigeria";
+import { nigeriaDayRange, nigeriaMonthRange, nigeriaYesterdayRange } from "@/lib/time/nigeria";
 import { formatNgnFromKobo } from "@/lib/utils/money";
 import { AddLocationForm } from "@/components/admin/add-location-form";
 import { AddPriceForm } from "@/components/admin/add-price-form";
@@ -25,8 +25,17 @@ function successfulPaymentDayWhere(start: Date, next: Date) {
 export default async function AdminHomePage() {
   const { start: todayStart, next: todayNext } = nigeriaDayRange();
   const { start: yesterdayStart, next: yesterdayNext } = nigeriaYesterdayRange();
-  const [vouchersBought, revenue, revenueToday, revenueYesterday, locations, plans, supportPhone] =
-    await Promise.all([
+  const { start: monthStart, next: monthNext } = nigeriaMonthRange();
+  const [
+    vouchersBought,
+    revenue,
+    revenueToday,
+    revenueYesterday,
+    revenueMonth,
+    locations,
+    plans,
+    supportPhone,
+  ] = await Promise.all([
       prisma.voucher.count(),
       prisma.payment.aggregate({
         _sum: { amountKobo: true },
@@ -40,6 +49,10 @@ export default async function AdminHomePage() {
         _sum: { amountKobo: true },
         where: successfulPaymentDayWhere(yesterdayStart, yesterdayNext),
       }),
+      prisma.payment.aggregate({
+        _sum: { amountKobo: true },
+        where: successfulPaymentDayWhere(monthStart, monthNext),
+      }),
       locationService.listAdminDashboard(),
       planService.listAdmin(),
       getSupportPhone(),
@@ -48,6 +61,7 @@ export default async function AdminHomePage() {
   const totalPriceKobo = revenue._sum.amountKobo ?? 0;
   const todayPriceKobo = revenueToday._sum.amountKobo ?? 0;
   const yesterdayPriceKobo = revenueYesterday._sum.amountKobo ?? 0;
+  const monthPriceKobo = revenueMonth._sum.amountKobo ?? 0;
 
   return (
     <div className="mx-auto max-w-5xl space-y-8">
@@ -60,7 +74,7 @@ export default async function AdminHomePage() {
         </p>
       </div>
 
-      <div className="grid gap-4 sm:grid-cols-3">
+      <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
         <Card>
           <CardHeader>
             <CardTitle>Vouchers bought</CardTitle>
@@ -81,6 +95,12 @@ export default async function AdminHomePage() {
               <p className="text-3xl font-semibold">{formatNgnFromKobo(yesterdayPriceKobo)}</p>
             </div>
           </CardContent>
+        </Card>
+        <Card>
+          <CardHeader>
+            <CardTitle>Made this month</CardTitle>
+          </CardHeader>
+          <CardContent className="text-3xl font-semibold">{formatNgnFromKobo(monthPriceKobo)}</CardContent>
         </Card>
         <Card>
           <CardHeader>

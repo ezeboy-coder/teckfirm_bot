@@ -50,6 +50,17 @@ export function nigeriaYesterdayRange(now = new Date()) {
   return { start, next: today.start, ymd: formatLagosYmd(start) };
 }
 
+/** Calendar month in West Africa Time (Africa/Lagos). End is exclusive. */
+export function nigeriaMonthRange(now = new Date()) {
+  const { year, month } = lagosYmd(now);
+  const start = new Date(`${year}-${month}-01T00:00:00+01:00`);
+  const monthNum = Number(month);
+  const nextYear = monthNum === 12 ? String(Number(year) + 1) : year;
+  const nextMonth = monthNum === 12 ? "01" : String(monthNum + 1).padStart(2, "0");
+  const next = new Date(`${nextYear}-${nextMonth}-01T00:00:00+01:00`);
+  return { start, next, year, month };
+}
+
 export function formatLagosDateTime(date: Date) {
   return new Intl.DateTimeFormat("en-NG", {
     timeZone: LAGOS,
