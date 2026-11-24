@@ -1,10 +1,12 @@
 import { OmadaError } from "@/lib/omada/errors";
 import { getVoucherGroup, listHotspotVouchers, listVoucherGroups } from "@/lib/omada/operations";
 import { extractIdRows, extractPagedVoucherRows } from "@/lib/omada/parse";
-import { voucherRowCode } from "@/lib/omada/vouchers";
+import { findVoucherRowByCode, voucherRowCode } from "@/lib/omada/vouchers";
 
 const PAGE_SIZE = 50;
 const MAX_PAGES = 20;
+const LIVE_PAGE_SIZE = 100;
+const LIVE_MAX_PAGES = 5;
 
 function isRecord(value: unknown): value is Record<string, unknown> {
   return typeof value === "object" && value !== null && !Array.isArray(value);
@@ -14,8 +16,9 @@ async function collectMatchingRows(
   loadPage: (page: number) => Promise<unknown>,
   remaining: Set<string>,
   found: Map<string, Record<string, unknown>>,
+  maxPages = MAX_PAGES,
 ): Promise<void> {
-  for (let page = 1; page <= MAX_PAGES && remaining.size > 0; page += 1) {
+  for (let page = 1; page <= maxPages && remaining.size > 0; page += 1) {
     const { rows, hasMore } = extractPagedVoucherRows(await loadPage(page));
     for (const row of rows) {
       const code = voucherRowCode(row);
@@ -25,6 +28,54 @@ async function collectMatchingRows(
     }
     if (!hasMore) break;
   }
+}
+
+function isMissingOnController(error: OmadaError) {
+  return error.code === "OMADA_REQUEST_FAILED" && !error.retryable;
+}
+
+function rowFromGroupPayload(payload: unknown, code: string): Record<string, unknown> | null {
+  const rows = extractPagedVoucherRows(payload).rows;
+  const matched = findVoucherRowByCode(rows, code);
+  if (matched) return matched;
+  if (isRecord(payload) && voucherRowCode(payload) === code) {
+    return payload;
+  }
+  return null;
+}
+
+/**
+ * Live unused/in-use vouchers only. Does not scan voucher groups, so a code that
+ * no longer exists returns quickly instead of paging the whole controller.
+ */
+export async function findLiveHotspotVoucher(
+  siteId: string,
+  input: { code: string; omadaVoucherId?: string | null },
+): Promise<Record<string, unknown> | null> {
+  const code = input.code.trim();
+  if (!code) return null;
+
+  const groupId = input.omadaVoucherId?.trim();
+  if (groupId) {
+    try {
+      const row = rowFromGroupPayload(await getVoucherGroup(siteId, groupId), code);
+      if (row) return row;
+    } catch (error) {
+      if (!(error instanceof OmadaError && isMissingOnController(error))) {
+        throw error;
+      }
+    }
+  }
+
+  const remaining = new Set([code]);
+  const found = new Map<string, Record<string, unknown>>();
+  await collectMatchingRows(
+    (page) => listHotspotVouchers(siteId, page, LIVE_PAGE_SIZE),
+    remaining,
+    found,
+    LIVE_MAX_PAGES,
+  );
+  return found.get(code) ?? null;
 }
 
 export async function findHotspotVoucherByCode(

@@ -77,6 +77,11 @@ export const adminLocationIdSchema = z.object({
   locationId: z.string().trim().min(1, "Choose a location"),
 });
 
+export const adminOrderVoucherPeekSchema = z.object({
+  orderId: z.string().trim().min(1, "Choose an order"),
+  locationId: z.string().trim().min(1, "Choose a location"),
+});
+
 export const adminLocationNameSchema = z.object({
   locationId: z.string().trim().min(1, "Choose a location"),
   community: z.string().trim().min(2, "Enter the community name").max(120),

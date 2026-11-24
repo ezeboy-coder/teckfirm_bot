@@ -11,6 +11,7 @@ import {
   ActivityStatusControls,
 } from "@/components/admin/activity-status-controls";
 import { activityHref } from "@/lib/admin/activity-href";
+import { BuyerVoucherPeek } from "@/components/admin/buyer-voucher-peek";
 import { LocationOrderStatus } from "@/components/admin/location-order-status";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
@@ -191,8 +192,13 @@ export default async function ManageLocationPage({
                     <TableRow key={row.id}>
                       <TableCell>{formatLagosDateTime(row.at)}</TableCell>
                       <TableCell>
-                        <span className="block">{row.buyer}</span>
-                        <span className="text-xs text-muted-foreground">{row.contact}</span>
+                        <BuyerVoucherPeek
+                          orderId={row.id}
+                          locationId={location.id}
+                          buyer={row.buyer}
+                          contact={row.contact}
+                          paymentConfirmed={row.paymentConfirmed}
+                        />
                       </TableCell>
                       <TableCell>{row.plan}</TableCell>
                       <TableCell>{formatNgnFromKobo(row.amountKobo)}</TableCell>
@@ -222,6 +228,7 @@ export default async function ManageLocationPage({
                       variant="outline"
                       size="sm"
                       className="h-8"
+                      nativeButton={false}
                       render={<Link href={pageHref(activityPage.page - 1)} scroll={false} />}
                     >
                       Previous
@@ -239,6 +246,7 @@ export default async function ManageLocationPage({
                       variant="outline"
                       size="sm"
                       className="h-8"
+                      nativeButton={false}
                       render={<Link href={pageHref(activityPage.page + 1)} scroll={false} />}
                     >
                       Next

@@ -2,7 +2,7 @@ export { omadaRequest } from "@/lib/omada/client";
 export { getOmadaCloudAccount, isOmadaCloudConfigured, controllerApiBase } from "@/lib/omada/config";
 export { withOmadaController, locationOmadaController } from "@/lib/omada/context";
 export { getSites, getLoginStatus, resolveHotspotSiteId, testOmadaConnection } from "@/lib/omada/sites";
-export { findHotspotVoucherByCode, findHotspotVouchersByCodes } from "@/lib/omada/lookup";
+export { findHotspotVoucherByCode, findHotspotVouchersByCodes, findLiveHotspotVoucher } from "@/lib/omada/lookup";
 export {
   getCurrentUser,
   getConnectedClients,

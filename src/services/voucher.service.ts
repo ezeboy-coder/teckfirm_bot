@@ -2,7 +2,7 @@ import type { VoucherStatus } from "@prisma/client";
 import { isOmadaCloudConfigured } from "@/lib/omada/config";
 import { locationOmadaController, withOmadaController } from "@/lib/omada/context";
 import { OMADA_FUNCTION_UNAVAILABLE_MESSAGE, OmadaError, OmadaNotConfiguredError } from "@/lib/omada/errors";
-import { findHotspotVoucherByCode, findHotspotVouchersByCodes } from "@/lib/omada/lookup";
+import { findHotspotVoucherByCode, findHotspotVouchersByCodes, findLiveHotspotVoucher } from "@/lib/omada/lookup";
 import { resolveHotspotSiteId } from "@/lib/omada/sites";
 import {
   extractOmadaVoucherFacts,
@@ -16,7 +16,9 @@ import { hashRetrievalPin } from "@/lib/security/retrieval-pin";
 import { displayName } from "@/lib/utils/display";
 import { normalizeGuestPhone } from "@/lib/utils/phone";
 import { getEnv } from "@/lib/validation/env";
+import { resolveLiveVoucherPeek, type ResolvedVoucherPeek } from "@/lib/admin/voucher-peek";
 import { getLocationById } from "@/repositories/location.repository";
+import { findOrderWithVoucher } from "@/repositories/order.repository";
 import {
   findPaidOrdersByPhoneAndPinHash,
   markVouchersExpiredByIds,
@@ -186,7 +188,56 @@ export async function checkVoucherOnController(
   }
 }
 
+export async function peekPaidOrderVoucher(
+  orderId: string,
+  locationId: string,
+): Promise<
+  ResolvedVoucherPeek | { kind: "not_paid" } | { kind: "not_found" } | { kind: "omada_error"; message: string }
+> {
+  const order = await findOrderWithVoucher(orderId);
+  if (!order || order.locationId !== locationId) {
+    return { kind: "not_found" };
+  }
+  if (order.paymentStatus !== "SUCCESS") {
+    return { kind: "not_paid" };
+  }
+
+  const voucher = order.voucher;
+  if (!voucher) {
+    return { kind: "missing" };
+  }
+
+  try {
+    if (!isOmadaCloudConfigured()) {
+      throw new OmadaNotConfiguredError();
+    }
+
+    const row = await withOmadaController(locationOmadaController(order.location), async () => {
+      const siteId = voucher.omadaSiteId?.trim() || (await resolveHotspotSiteId(order.location));
+      return findLiveHotspotVoucher(siteId, {
+        code: voucher.code,
+        omadaVoucherId: voucher.omadaVoucherId,
+      });
+    });
+
+    return resolveLiveVoucherPeek({
+      code: voucher.code,
+      live: row ? { status: extractOmadaVoucherFacts(row).status } : { missing: true },
+    });
+  } catch (error) {
+    if (error instanceof OmadaError) {
+      logger.error("Admin voucher peek could not reach the controller", {
+        code: error.code,
+        omadaErrorCode: error.omadaErrorCode,
+      });
+      return { kind: "omada_error", message: OMADA_FUNCTION_UNAVAILABLE_MESSAGE };
+    }
+    throw error;
+  }
+}
+
 export const voucherService = {
   lookupGuestVouchers,
   checkVoucherOnController,
+  peekPaidOrderVoucher,
 };

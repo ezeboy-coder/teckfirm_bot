@@ -194,6 +194,7 @@ export const locationService = {
           order.user?.email ||
           "Guest",
         contact: order.guestPhone || order.user?.phone || order.guestEmail || order.user?.email || "—",
+        paymentConfirmed: order.paymentStatus === "SUCCESS",
         plan: order.items[0]?.plan.name ?? "WiFi plan",
         amountKobo: order.totalKobo,
         referenceTail: lastSixReferenceChars(order.reference),
