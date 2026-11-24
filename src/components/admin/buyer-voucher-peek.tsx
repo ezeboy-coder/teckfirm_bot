@@ -16,21 +16,20 @@ function peekCopy(peek: ResolvedVoucherPeek) {
   if (peek.kind === "missing") {
     return {
       title: "Issued voucher",
-      body: "No voucher is recorded for this payment yet.",
+      status: "No voucher is recorded for this payment yet.",
       code: null as string | null,
     };
   }
   if (peek.kind === "expired") {
     return {
       title: "Voucher status",
-      body: "This voucher has expired.",
+      status: "This voucher has expired.",
       code: null as string | null,
     };
   }
-  const live = peek.liveStatus === "in-use" ? "In use" : "Unused";
   return {
     title: "Issued voucher",
-    body: `Status: ${live}`,
+    status: peek.liveStatus === "in-use" ? "In use" : "Unused",
     code: peek.code,
   };
 }
@@ -113,9 +112,19 @@ export function BuyerVoucherPeek({
                 ? "Checking this payment’s voucher…"
                 : error
                   ? error
-                  : (copy?.body ?? "Could not load that voucher.")}
+                  : "Live voucher for this buyer."}
             </DialogDescription>
           </DialogHeader>
+          <p className="text-sm">
+            <span className="text-muted-foreground">Phone</span>
+            <span className="mt-0.5 block font-medium">{contact}</span>
+          </p>
+          {copy && !loading && !error ? (
+            <p className="text-sm">
+              <span className="text-muted-foreground">Status</span>
+              <span className="mt-0.5 block font-medium">{copy.status}</span>
+            </p>
+          ) : null}
           {copy?.code ? (
             <p className="font-mono text-2xl font-semibold tracking-widest">{copy.code}</p>
           ) : null}

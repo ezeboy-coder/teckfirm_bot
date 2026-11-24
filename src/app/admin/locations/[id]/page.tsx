@@ -176,15 +176,15 @@ export default async function ManageLocationPage({
                   <TableRow>
                     <TableHead>When</TableHead>
                     <TableHead>Buyer</TableHead>
-                    <TableHead>Plan</TableHead>
-                    <TableHead>Amount</TableHead>
-                    <TableHead>
+                    <TableHead className="h-auto align-bottom whitespace-normal text-center">
                       <ActivityStatusControls
                         locationId={location.id}
                         statusFilter={statusFilter}
                         dateFilter={dateFilter}
                       />
                     </TableHead>
+                    <TableHead>Amount</TableHead>
+                    <TableHead>Plan</TableHead>
                   </TableRow>
                 </TableHeader>
                 <TableBody>
@@ -200,9 +200,7 @@ export default async function ManageLocationPage({
                           paymentConfirmed={row.paymentConfirmed}
                         />
                       </TableCell>
-                      <TableCell>{row.plan}</TableCell>
-                      <TableCell>{formatNgnFromKobo(row.amountKobo)}</TableCell>
-                      <TableCell>
+                      <TableCell className="text-center">
                         <LocationOrderStatus
                           orderId={row.id}
                           locationId={location.id}
@@ -214,6 +212,8 @@ export default async function ManageLocationPage({
                           canResolve={row.canResolve}
                         />
                       </TableCell>
+                      <TableCell>{formatNgnFromKobo(row.amountKobo)}</TableCell>
+                      <TableCell>{row.plan}</TableCell>
                     </TableRow>
                   ))}
                 </TableBody>

@@ -136,51 +136,53 @@ export function ActivityStatusControls({
   }, [state.error, state.intent, state.success, state.summary]);
 
   return (
-    <div className="inline-flex items-center gap-1.5">
-      <span>Status</span>
-      <Select
-        value={statusFilter}
-        onValueChange={(value) => {
-          if (!value) return;
-          const next = ACTIVITY_STATUS_FILTERS.find((item) => item.value === value)?.value ?? "all";
-          startTransition(() => {
-            router.push(
-              activityHref(locationId, {
-                status: next,
-                when: dateFilter.preset,
-                on: dateFilter.on,
-                page: 1,
-              }),
-              { scroll: false },
-            );
-          });
-        }}
-        disabled={navigating}
-      >
-        <SelectTrigger size="sm" className="h-7 min-w-28" aria-label="Filter by transaction status">
-          <SelectValue />
-        </SelectTrigger>
-        <SelectContent>
-          {ACTIVITY_STATUS_FILTERS.map((item) => (
-            <SelectItem key={item.value} value={item.value}>
-              {item.label}
-            </SelectItem>
-          ))}
-        </SelectContent>
-      </Select>
-      <form action={action} className="inline-flex">
-        <input type="hidden" name="intent" value="refresh_pending" />
-        <input type="hidden" name="locationId" value={locationId} />
-        <Button
-          type="submit"
-          variant="ghost"
-          size="icon-xs"
-          disabled={pending}
-          aria-label="Refresh pending payment statuses"
+    <div className="flex flex-col items-center gap-1">
+      <div className="inline-flex items-center justify-center gap-1">
+        <Select
+          value={statusFilter}
+          onValueChange={(value) => {
+            if (!value) return;
+            const next = ACTIVITY_STATUS_FILTERS.find((item) => item.value === value)?.value ?? "all";
+            startTransition(() => {
+              router.push(
+                activityHref(locationId, {
+                  status: next,
+                  when: dateFilter.preset,
+                  on: dateFilter.on,
+                  page: 1,
+                }),
+                { scroll: false },
+              );
+            });
+          }}
+          disabled={navigating}
         >
-          <RefreshCw className={cn(pending && "animate-spin")} />
-        </Button>
-      </form>
+          <SelectTrigger size="sm" className="h-7 w-[6.5rem]" aria-label="Filter by transaction status">
+            <SelectValue />
+          </SelectTrigger>
+          <SelectContent>
+            {ACTIVITY_STATUS_FILTERS.map((item) => (
+              <SelectItem key={item.value} value={item.value}>
+                {item.label}
+              </SelectItem>
+            ))}
+          </SelectContent>
+        </Select>
+        <form action={action} className="inline-flex">
+          <input type="hidden" name="intent" value="refresh_pending" />
+          <input type="hidden" name="locationId" value={locationId} />
+          <Button
+            type="submit"
+            variant="ghost"
+            size="icon-xs"
+            disabled={pending}
+            aria-label="Refresh pending payment statuses"
+          >
+            <RefreshCw className={cn(pending && "animate-spin")} />
+          </Button>
+        </form>
+      </div>
+      <span>Status</span>
     </div>
   );
 }
