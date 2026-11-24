@@ -1,8 +1,11 @@
 "use client";
 
 import { useRef, useState } from "react";
+import { Check, Copy } from "lucide-react";
+import { toast } from "sonner";
 import { peekIssuedVoucherAction } from "@/app/admin/order-actions";
 import type { ResolvedVoucherPeek } from "@/lib/admin/voucher-peek";
+import { copyTextToClipboard } from "@/lib/utils/clipboard";
 import { Button } from "@/components/ui/button";
 import {
   Dialog,
@@ -52,6 +55,7 @@ export function BuyerVoucherPeek({
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [peek, setPeek] = useState<ResolvedVoucherPeek | null>(null);
+  const [copied, setCopied] = useState(false);
 
   function closePeek() {
     requestId.current += 1;
@@ -59,6 +63,17 @@ export function BuyerVoucherPeek({
     setLoading(false);
     setError(null);
     setPeek(null);
+    setCopied(false);
+  }
+
+  async function copyVoucher(code: string) {
+    const copiedCode = await copyTextToClipboard(code);
+    if (!copiedCode) {
+      toast.error("Couldn’t copy. Select the code instead.");
+      return;
+    }
+    setCopied(true);
+    toast.success("Voucher copied.");
   }
 
   async function openPeek() {
@@ -126,7 +141,20 @@ export function BuyerVoucherPeek({
             </p>
           ) : null}
           {copy?.code ? (
-            <p className="font-mono text-2xl font-semibold tracking-widest">{copy.code}</p>
+            <div className="flex items-center gap-2">
+              <p className="font-mono text-2xl font-semibold tracking-widest">{copy.code}</p>
+              <Button
+                type="button"
+                variant="ghost"
+                size="icon-sm"
+                aria-label={copied ? "Voucher copied" : "Copy voucher"}
+                onClick={() => {
+                  if (copy.code) void copyVoucher(copy.code);
+                }}
+              >
+                {copied ? <Check /> : <Copy />}
+              </Button>
+            </div>
           ) : null}
           <div className="flex justify-end">
             <Button type="button" variant="outline" size="sm" onClick={closePeek}>
